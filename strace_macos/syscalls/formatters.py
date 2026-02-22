@@ -96,17 +96,17 @@ class JSONFormatter:
         """
         # Look up handler by exact type
         handler = JSONFormatter._TYPE_HANDLERS.get(type(arg))
+        res = dict()
         if handler is not None:
-            res = handler(arg)
+            res['value'] = handler(arg)
         else:
             # Fallback for unknown types
-            res = str(arg)
+            res['value'] = str(arg)
 
-        
         if isinstance(arg, AnnotatedArg) and arg.annotation is not None:
-            return (res, arg.annotation)
-        else:
-            return (res,)
+            res['annotation'] = arg.annotation.value()
+
+        return res
 
     @staticmethod
     def format(event: SyscallEvent) -> str:

@@ -12,6 +12,10 @@ class FDAnnotation(Annotation):
     def __str__(self) -> str:
         return self.path 
 
+    def value(self):
+        """get the contents of this annotation in an appropriate form for json outout"""
+        return self.path 
+
 def annotate_fd(ctx: DecodeContext, fd: int) -> FDAnnotation:
     pid = ctx.process.id
     proc = psutil.Process(pid)
