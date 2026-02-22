@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Union
 
 from strace_macos.syscalls.args import (
+    AnnotatedArg,
     FileDescriptorArg,
     FlagsArg,
     IntArg,
@@ -34,10 +35,10 @@ class SyscallEvent:
     pid: int
     syscall_name: str
     args: list[SyscallArg]
-    return_value_raw: int | None
-    return_value_decoded: str | None
     timestamp: float
     raw_args: list[int] = field(default_factory=list)
+    return_value_raw: int | None = None
+    return_value_decoded: str | None = None
 
     def return_value_is_error(self):
         """does the return value represent an error?"""
@@ -96,10 +97,16 @@ class JSONFormatter:
         # Look up handler by exact type
         handler = JSONFormatter._TYPE_HANDLERS.get(type(arg))
         if handler is not None:
-            return handler(arg)
+            res = handler(arg)
+        else:
+            # Fallback for unknown types
+            res = str(arg)
 
-        # Fallback for unknown types
-        return str(arg)
+        
+        if isinstance(arg, AnnotatedArg) and arg.annotation is not None:
+            return (res, arg.annotation)
+        else:
+            return (res,)
 
     @staticmethod
     def format(event: SyscallEvent) -> str:
@@ -132,6 +139,14 @@ class TextFormatter:
     """Format syscalls in strace-compatible text format."""
 
     @staticmethod
+    def _make_arg(arg : SyscallArg) -> str:
+        """Format an individual arg to a string, optionally adding the annotation"""
+        s = str(arg)
+        if isinstance(arg, AnnotatedArg) and arg.annotation is not None:
+            s += " <" + str(arg.annotation) + ">"
+        return s
+
+    @staticmethod
     def format(event: SyscallEvent) -> str:
         """Format a syscall event as strace-style text.
 
@@ -142,7 +157,7 @@ class TextFormatter:
             Text string (no trailing newline)
         """
         # Format arguments, filtering out SkipArg
-        args_str = ", ".join(str(arg) for arg in event.args if not isinstance(arg, SkipArg))
+        args_str = ", ".join(TextFormatter._make_arg(arg) for arg in event.args if not isinstance(arg, SkipArg))
 
         # Format return value
         ret_str = str(event.return_value_formatted())
@@ -161,6 +176,7 @@ class ColorTextFormatter:
     NUMBER = "\033[0;35m"  # Magenta for numbers
     POINTER = "\033[0;34m"  # Blue for pointers/addresses
     FD = "\033[0;32m"  # Green for file descriptors
+    ANNOTATION = "\033[0;33m"  # Yellow for annotations
     RETURN_OK = "\033[1;32m"  # Bright green for successful returns
     RETURN_ERR = "\033[1;31m"  # Bright red for errors
     PUNCTUATION = "\033[0;37m"  # White for punctuation
@@ -182,16 +198,23 @@ class ColorTextFormatter:
             if isinstance(arg, SkipArg):
                 continue
             if isinstance(arg, StringArg):
-                colored_args.append(f"{ColorTextFormatter.STRING}{arg}{ColorTextFormatter.RESET}")
+                s = (f"{ColorTextFormatter.STRING}{arg}{ColorTextFormatter.RESET}")
             elif isinstance(arg, PointerArg):
-                colored_args.append(f"{ColorTextFormatter.POINTER}{arg}{ColorTextFormatter.RESET}")
+                s = (f"{ColorTextFormatter.POINTER}{arg}{ColorTextFormatter.RESET}")
             elif isinstance(arg, FileDescriptorArg):
-                colored_args.append(f"{ColorTextFormatter.FD}{arg}{ColorTextFormatter.RESET}")
+                s = (f"{ColorTextFormatter.FD}{arg}{ColorTextFormatter.RESET}")
             elif isinstance(arg, (IntArg, UnsignedArg)):
-                colored_args.append(f"{ColorTextFormatter.NUMBER}{arg}{ColorTextFormatter.RESET}")
+                s = (f"{ColorTextFormatter.NUMBER}{arg}{ColorTextFormatter.RESET}")
             else:
                 # Unknown type - no color
-                colored_args.append(str(arg))
+                s = (str(arg))
+            
+            # add annotation
+            if isinstance(arg, AnnotatedArg) and arg.annotation is not None:
+                ann = str(arg.annotation)
+                s += (f"{ColorTextFormatter.ANNOTATION} <{ann}>{ColorTextFormatter.RESET}")
+
+            colored_args.append(s)
 
         args_str = f"{ColorTextFormatter.PUNCTUATION},{ColorTextFormatter.RESET} ".join(
             colored_args

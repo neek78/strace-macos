@@ -486,8 +486,6 @@ class Tracer:
             pid=process.GetProcessID(),
             syscall_name=syscall_name,
             args=args,
-            return_value_raw=None,
-            return_value_decoded=None,
             timestamp=time.time(),
             raw_args=raw_args,
         )

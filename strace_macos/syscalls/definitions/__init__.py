@@ -24,6 +24,9 @@ from strace_macos.syscalls.args import (
     UnsignedArg,
 )
 from strace_macos.syscalls.symbols.file import AT_FDCWD, FLOCK_OPS
+from strace_macos.syscalls.annotate import annotate_fd
+
+
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -305,7 +308,8 @@ class FileDescriptorParam(Param):
     def decode(self, ctx: DecodeContext) -> SyscallArg:
         """Decode file descriptor to FileDescriptorArg."""
         signed_val = self._to_signed_int(ctx.raw_value)
-        return FileDescriptorArg(signed_val)
+        annotation = annotate_fd(ctx, signed_val)
+        return FileDescriptorArg(signed_val, annotation)
 
 
 def FlagsParam(flag_map: dict[int, str]) -> Param:  # noqa: N802

@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 
 from strace_macos.string_quote import quote_string
 
+from strace_macos.syscalls.annotate import Annotation
 
 class SyscallArg(ABC):
     """Base class for typed syscall arguments."""
@@ -15,6 +16,9 @@ class SyscallArg(ABC):
         """Return string representation of the argument."""
         ...
 
+class AnnotatedArg(SyscallArg):
+    """Argument with optional extra annotations"""
+    annotation: Annotation = None
 
 class IntArg(SyscallArg):
     """Signed integer argument."""
@@ -84,20 +88,22 @@ class StringArg(SyscallArg):
         return f'"{escaped}"'
 
 
-class FileDescriptorArg(SyscallArg):
+class FileDescriptorArg(AnnotatedArg):
     """File descriptor argument (special case of int)."""
 
-    def __init__(self, fd: int) -> None:
+    def __init__(self, fd: int, annotation: Annotation) -> None:
         """Initialize a file descriptor argument.
 
         Args:
             fd: The file descriptor number
         """
         self.fd = fd
+        self.annotation = annotation
 
     def __str__(self) -> str:
         """Return string representation."""
-        return str(self.fd)
+        s = str(self.fd)
+        return s
 
 
 class FlagsArg(SyscallArg):

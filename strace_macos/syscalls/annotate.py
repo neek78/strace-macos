@@ -1,0 +1,22 @@
+import psutil
+
+from dataclasses import dataclass, field
+
+class Annotation():
+    pass
+
+@dataclass
+class FDAnnotation(Annotation):
+    path: str
+
+    def __str__(self) -> str:
+        return self.path 
+
+def annotate_fd(ctx: DecodeContext, fd: int) -> FDAnnotation:
+    pid = ctx.process.id
+    proc = psutil.Process(pid)
+
+    for f in proc.open_files():
+        if f.fd == fd:
+            return FDAnnotation(path = f.path)
+    return None
