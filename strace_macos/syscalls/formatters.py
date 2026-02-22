@@ -44,7 +44,7 @@ class SyscallEvent:
         return self.return_value_raw < 0
 
     def return_value_formatted(self):
-        """return a string representation of the return value"""
+        """return the decoded representation of the return value if possible otherwise raw"""
 
         # if raw value is None, actually is no return value for the rare syscalls
         # like sync() that don't return anything. to be compatible with strace, 
@@ -55,7 +55,7 @@ class SyscallEvent:
         if self.return_value_decoded is not None:
             return self.return_value_decoded
         else:
-            return str(self.return_value_raw)
+            return self.return_value_raw
 
 
 def _format_symbolic_or_value(arg: IntArg | FlagsArg) -> str | int:
@@ -145,7 +145,7 @@ class TextFormatter:
         args_str = ", ".join(str(arg) for arg in event.args if not isinstance(arg, SkipArg))
 
         # Format return value
-        ret_str = event.return_value_formatted()
+        ret_str = str(event.return_value_formatted())
 
         # strace format: syscall(args) = return
         return f"{event.syscall_name}({args_str}) = {ret_str}"
@@ -203,7 +203,7 @@ class ColorTextFormatter:
         else:
             ret_color = ColorTextFormatter.RETURN_OK
 
-        ret_str = event.return_value_formatted()
+        ret_str = str(event.return_value_formatted())
 
         # strace format with colors: syscall(args) = return
         return (
