@@ -34,9 +34,28 @@ class SyscallEvent:
     pid: int
     syscall_name: str
     args: list[SyscallArg]
-    return_value: int | str
+    return_value_raw: int | None
+    return_value_decoded: str | None
     timestamp: float
     raw_args: list[int] = field(default_factory=list)
+
+    def return_value_is_error(self):
+        """does the return value represent an error?"""
+        return self.return_value_raw < 0
+
+    def return_value_formatted(self):
+        """return a string representation of the return value"""
+
+        # if raw value is None, actually is no return value for the rare syscalls
+        # like sync() that don't return anything. to be compatible with strace, 
+        # still print =0
+        if self.return_value_raw is None:
+            return "0"
+
+        if self.return_value_decoded is not None:
+            return self.return_value_decoded
+        else:
+            return str(self.return_value_raw)
 
 
 def _format_symbolic_or_value(arg: IntArg | FlagsArg) -> str | int:
@@ -126,10 +145,7 @@ class TextFormatter:
         args_str = ", ".join(str(arg) for arg in event.args if not isinstance(arg, SkipArg))
 
         # Format return value
-        if isinstance(event.return_value, str):
-            ret_str = event.return_value
-        else:
-            ret_str = str(event.return_value)
+        ret_str = event.return_value_formatted()
 
         # strace format: syscall(args) = return
         return f"{event.syscall_name}({args_str}) = {ret_str}"
@@ -182,15 +198,12 @@ class ColorTextFormatter:
         )
 
         # Format return value with color based on success/error
-        if isinstance(event.return_value, str):
-            ret_str = event.return_value
-            ret_color = ColorTextFormatter.RETURN_OK
-        elif event.return_value < 0:
-            ret_str = str(event.return_value)
+        if event.return_value_is_error():
             ret_color = ColorTextFormatter.RETURN_ERR
         else:
-            ret_str = str(event.return_value)
             ret_color = ColorTextFormatter.RETURN_OK
+
+        ret_str = event.return_value_formatted()
 
         # strace format with colors: syscall(args) = return
         return (
@@ -225,7 +238,7 @@ class SummaryFormatter:
         self.stats[event.syscall_name]["count"] += 1
 
         # Count errors (negative return values typically indicate errors)
-        if isinstance(event.return_value, int) and event.return_value < 0:
+        if event.return_value_raw is not None and not event.return_value_is_error():
             self.stats[event.syscall_name]["errors"] += 1
 
     def format(self) -> str:

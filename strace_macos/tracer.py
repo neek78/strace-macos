@@ -480,28 +480,22 @@ class Tracer:
 
         # Get return address using architecture-specific method
         return_address = self.arch.get_return_address(frame, process, self.lldb)
-        if return_address is None:
-            # Can't get return address, emit event without return value
-            event = SyscallEvent(
-                pid=process.GetProcessID(),
-                syscall_name=syscall_name,
-                args=args,
-                return_value="?",
-                timestamp=time.time(),
-                raw_args=raw_args,
-            )
-            self._write_event(event)
-            return
 
         # Create pending event with raw_args saved for exit-time decoding
         event = SyscallEvent(
             pid=process.GetProcessID(),
             syscall_name=syscall_name,
             args=args,
-            return_value="?",
+            return_value_raw=None,
+            return_value_decoded=None,
             timestamp=time.time(),
             raw_args=raw_args,
         )
+
+        if return_address is None:
+            # Can't get return address, emit event without return value
+            self._write_event(event)
+            return
 
         # Set one-shot breakpoint at return address
         target = process.GetTarget()
@@ -538,24 +532,25 @@ class Tracer:
             else:
                 signed_ret = int(ret_value)
 
+            event.return_value_raw  = signed_ret
+
             # Check if syscall has a custom return decoder
             syscall_def = self.registry.lookup_by_name(event.syscall_name)
-            if syscall_def and syscall_def.return_decoder and signed_ret >= 0:
+            if syscall_def and syscall_def.return_decoder and not event.return_value_is_error():
                 # Use custom return decoder
-                event.return_value = syscall_def.return_decoder(
+                event.return_value_decoded = syscall_def.return_decoder(
                     signed_ret, event.raw_args, no_abbrev=self.no_abbrev
                 )
-            elif not self.no_abbrev and signed_ret < 0:
+            elif not self.no_abbrev and event.return_value_is_error():
                 # Apply errno decoding if enabled and return is an error
-                event.return_value = decode_errno(signed_ret)
-            else:
-                event.return_value = signed_ret
+                event.return_value_decoded = decode_errno(signed_ret)
+
         else:
-            event.return_value = "?"
+            event.return_value_raw = None
 
         # Decode output parameters if syscall succeeded
         # Only decode output params if return value indicates success (>= 0)
-        if isinstance(event.return_value, int) and event.return_value >= 0:
+        if event.return_value_raw is not None and not event.return_value_is_error():
             syscall_def = self.registry.lookup_by_name(event.syscall_name)
             if syscall_def:
                 self._decode_params_at_exit(event, syscall_def.params)
@@ -679,7 +674,7 @@ class Tracer:
         if self.decode_ctx:
             self.decode_ctx.all_args = raw_values
             self.decode_ctx.at_entry = False
-            self.decode_ctx.return_value = event.return_value
+            self.decode_ctx.return_value = event.return_value_raw
 
         # Re-decode parameters that need exit-time decoding
         for i, param in enumerate(params):
