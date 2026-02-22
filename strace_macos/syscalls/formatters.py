@@ -121,7 +121,7 @@ class JSONFormatter:
         data = {
             "syscall": event.syscall_name,
             "args": formatted_args,
-            "return": event.return_value,
+            "return": event.return_value_formatted(),
             "pid": event.pid,
             "timestamp": event.timestamp,
         }
