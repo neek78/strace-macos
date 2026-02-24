@@ -134,7 +134,7 @@ def decode_errno(value: int) -> str:
     errno_num = -value
     if errno_num in ERRNO_MAP:
         name, desc = ERRNO_MAP[errno_num]
-        return f"-1 {name} ({desc})"
+        return f"errno = {value} {name} ({desc})"
 
     # Unknown errno
     return str(value)
