@@ -39,24 +39,26 @@ class SyscallEvent:
     timestamp: float
     raw_args: list[int] = field(default_factory=list)
 
-    def return_value_is_error(self):
+    def return_value_is_error(self) -> bool:
         """does the return value represent an error?"""
         return self.return_value_raw < 0
 
-    def return_value_formatted(self):
-        """return the decoded representation of the return value if possible otherwise raw"""
+    def format_return_value_raw(self) -> int:
+        """Get raw return value formatted for output"""
 
-        # if raw value is None, actually is no return value for the rare syscalls
-        # like sync() that don't return anything. to be compatible with strace, 
+        # If raw value is None, actually is no return value for the rare syscalls
+        # like sync() that don't return anything. To be compatible with linux strace, 
         # still print =0
         if self.return_value_raw is None:
-            return "0"
+            return 0
+        return self.return_value_raw
+
+    def format_return_value_as_str(self) -> str:
+        ret_str = str(self.format_return_value_raw())
 
         if self.return_value_decoded is not None:
-            return self.return_value_decoded
-        else:
-            return self.return_value_raw
-
+            ret_str += " " + str(self.return_value_decoded)
+        return ret_str
 
 def _format_symbolic_or_value(arg: IntArg | FlagsArg) -> str | int:
     """Format IntArg or FlagsArg: prefer symbolic name if available, else value."""
@@ -121,10 +123,12 @@ class JSONFormatter:
         data = {
             "syscall": event.syscall_name,
             "args": formatted_args,
-            "return": event.return_value_formatted(),
+            "return": event.format_return_value_raw(),
             "pid": event.pid,
             "timestamp": event.timestamp,
         }
+        if event.return_value_decoded is not None:
+            data["return_decoded"] = event.return_value_decoded
         return json.dumps(data)
 
 
@@ -145,7 +149,7 @@ class TextFormatter:
         args_str = ", ".join(str(arg) for arg in event.args if not isinstance(arg, SkipArg))
 
         # Format return value
-        ret_str = str(event.return_value_formatted())
+        ret_str = str(event.format_return_value_as_str())
 
         # strace format: syscall(args) = return
         return f"{event.syscall_name}({args_str}) = {ret_str}"
@@ -203,7 +207,7 @@ class ColorTextFormatter:
         else:
             ret_color = ColorTextFormatter.RETURN_OK
 
-        ret_str = str(event.return_value_formatted())
+        ret_str = str(event.format_return_value_as_str())
 
         # strace format with colors: syscall(args) = return
         return (
