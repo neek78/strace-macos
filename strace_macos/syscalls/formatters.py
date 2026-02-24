@@ -57,7 +57,7 @@ class SyscallEvent:
         ret_str = str(self.format_return_value_raw())
 
         if self.return_value_decoded is not None:
-            ret_str += " " + str(self.return_value_decoded)
+            ret_str += " | " + str(self.return_value_decoded)
         return ret_str
 
 def _format_symbolic_or_value(arg: IntArg | FlagsArg) -> str | int:
