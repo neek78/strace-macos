@@ -212,7 +212,6 @@ class Tracer:
             debugger = self.lldb.SBDebugger.Create()
             debugger.SetAsync(False)  # noqa: FBT003
 
-            self.debugger = debugger
             # Create target
             target = debugger.CreateTarget(command[0])
             if not target:
@@ -326,7 +325,7 @@ class Tracer:
             if not result:
                 return 1
 
-            self._debugger, target, process = result
+            _debugger, target, process = result
             self._set_syscall_breakpoints(target)
 
             # Create reusable decode context (avoids allocations in hot path)
@@ -507,14 +506,9 @@ class Tracer:
         thread_id = thread.GetThreadID()
         self.pending_syscalls[(thread_id, return_address)] = event
 
-    def _get_errno_value(
-        self, frame: lldb.SBFrame, thread_id: int, return_address: int, return_value: int) -> int:
-        """find the current errno value for this thread"""
-
-        res = self.lldb.SBCommandReturnObject()
-        cmd = self.debugger.GetCommandInterpreter()
-        cmd.HandleCommand("expression errno", res)
-        v = res.GetValues(use_dynamic=True)[0]
+    def _get_errno_value(self, frame: lldb.SBFrame) -> int:
+        """find the current errno value for this frame"""
+        v = frame.EvaluateExpression("errno")
         return -v.GetValueAsSigned()
 
     def _handle_syscall_return(
@@ -551,8 +545,7 @@ class Tracer:
             if event.return_value_is_error():
                 if not self.no_abbrev:
                     # Apply errno decoding if enabled and return is an error
-                    errno = self._get_errno_value(frame, thread_id, return_address, signed_ret)
-                    #print("ERRNO", errno)
+                    errno = self._get_errno_value(frame)
                     event.return_value_decoded = decode_errno(errno)
             elif syscall_def and syscall_def.return_decoder:
                 # Use custom return decoder
