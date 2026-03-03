@@ -4,7 +4,7 @@ import setuptools
 
 proc_wrapper = setuptools.Extension(
     "proc_wrapper",
-    sources=["strace_macos/proc_wrapper.c"],
+    sources=["strace_macos/proc_wrapper.cpp"],
     #library_dirs=['../lib'],
     #libraries=["lsof"],
     #extra_compile_args=['-g','-O0'],
