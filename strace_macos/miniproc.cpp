@@ -43,7 +43,7 @@ ModuleState& get_module_state(PyObject* module)
 {
     assert(module);
     void* state = PyModule_GetState(module);
-    printf("get_module_state mod=%p state=%p\n", module, state);
+    //printf("get_module_state mod=%p state=%p\n", module, state);
     assert(state != NULL);
 
     //ModuleState* s = (ModuleState*)state;
@@ -64,8 +64,8 @@ ModuleState& get_module_state_from_self(PyObject* self)
 #endif
 PyObject* extract_address(ModuleState& state, const in4in6_addr& addr, bool ipv4)
 {
-    printf("extract addr\n");
-    state.print();
+    //printf("extract addr\n");
+    //state.print();
     assert(state.ipv4_ctor);
     assert(state.ipv6_ctor);
 
@@ -78,8 +78,10 @@ PyObject* extract_address(ModuleState& state, const in4in6_addr& addr, bool ipv4
     if (ipv4) {
         //py_addr = PyLong_FromLong(ntohl(addr.i46a_addr4.s_addr));
         uint32_t a = ntohl(addr.i46a_addr4.s_addr);
-        auto args = Py_BuildValue("l", a);
-        args = PyUnicode_FromString("Nuh-Uh IP6");
+        //PyObject* args = Py_BuildValue("(i)", a);
+
+        PyObject* b = PyLong_FromLong(a);
+        PyObject* args = PyTuple_Pack(1, b);
         assert(args);
         py_addr = PyObject_Call(state.ipv4_ctor, args, NULL);
     } else {
@@ -87,7 +89,7 @@ PyObject* extract_address(ModuleState& state, const in4in6_addr& addr, bool ipv4
         printf("IP6\n");
         py_addr = PyUnicode_FromString("Nuh-Uh IP6");
     }
-    printf("addr %p\n", py_addr);
+    //printf("addr %p\n", py_addr);
     PyDict_SetItemString(out, "address", py_addr);
 
     return out;
@@ -256,9 +258,7 @@ static int miniproc_exec(PyObject *module)
 {
     printf("miniproc_exec mod=%p state=%p\n", module, PyModule_GetState(module));
 
-    // auto s = PyModule_GetState(module);
     ModuleState& state = get_module_state(module);
-    state.print();
 
     // note that even in the case of error return, miniproc_free() is still
     // called, which will clean up. We just have to leave the state
@@ -284,8 +284,8 @@ static int miniproc_exec(PyObject *module)
     }
 
     state.enum_ctor = PyObject_GetAttrString(state.enum_mod, "Enum");
-    printf("exec done\n");
-    state.print();
+    //printf("exec done\n");
+    //state.print();
 
     assert(state.ipv4_ctor);
     assert(state.ipv6_ctor);
@@ -295,9 +295,9 @@ static int miniproc_exec(PyObject *module)
 
 //typedef int (*inquiry)(PyObject *);
 static int miniproc_clear(PyObject* module) {
-    printf("miniproc clear mod=%p\n", module);
+    //printf("miniproc clear mod=%p\n", module);
     ModuleState& state = get_module_state(module);
-    state.print();
+    //state.print();
     state.clear();
     return 0;
 }
