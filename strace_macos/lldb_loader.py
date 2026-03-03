@@ -24,7 +24,8 @@ def _iter_lldb_pythonpaths() -> list[str]:
     # Try to get lldb-python path from lldb command
     try:
         result = subprocess.run(
-            ["xcrun", "lldb", "-P"],
+            ['/opt/homebrew/opt/llvm@22/bin/lldb', '-P'],
+            #["xcrun", "lldb", "-P"],
             capture_output=True,
             text=True,
             check=False,

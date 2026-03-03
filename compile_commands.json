@@ -1,0 +1,6 @@
+[{
+  "directory": "/Users/nick/src/strace-macos.procwrapper/strace_macos/",
+  "command": "clang -fno-strict-overflow -Wsign-compare -Wunreachable-code -fno-common -dynamic -DNDEBUG -g -O3 -Wall -I/opt/homebrew/opt/python@3.14/Frameworks/Python.framework/Versions/3.14/include/python3.14 -c strace_macos/proc_wrapper.c -o build/temp.macosx-26.0-arm64-cpython-314/strace_macos/proc_wrapper.o /opt/homebrew/opt/llvm@22/bin/clang -bundle -undefined dynamic_lookup build/temp.macosx-26.0-arm64-cpython-314/strace_macos/proc_wrapper.o -o build/lib.macosx-26.0-arm64-cpython-314/proc_wrapper.cpython-314-darwin.so"
+  "file": "/Users/nick/src/strace-macos.procwrapper/strace_macos/proc_wrapper.c"
+}]
+
