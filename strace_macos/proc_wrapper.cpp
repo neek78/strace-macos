@@ -10,9 +10,120 @@
 
 #include <libproc.h>
 
+PyObject* extract_address(const in4in6_addr& addr, bool ipv4)
+{
+    PyObject* out = PyDict_New();
+    if(out == NULL) {
+        return NULL;
+    }
+
+    PyObject* py_addr = NULL;
+    if (ipv4) {
+        py_addr = PyLong_FromLong(ntohl(addr.i46a_addr4.s_addr));
+    } else {
+    // FIXME: byte order
+        printf("IP6\n");
+        py_addr = PyUnicode_FromString("Nuh-Uh IP6");
+    }
+    printf("addr %p\n", py_addr);
+    PyDict_SetItemString(out, "address", py_addr);
+
+    return out;
+}
+
+PyObject* handle_socket_addr(const socket_fdinfo& si)
+{
+    PyObject* out = PyDict_New();
+    if(out == NULL) {
+        return NULL;
+    }
+
+    int family = si.psi.soi_family;
+    assert(family == AF_INET || family == AF_INET6);
+    bool ipv4 = family == AF_INET;
+
+    if (si.psi.soi_kind == SOCKINFO_TCP) {
+        // tcp socket
+        PyDict_SetItemString(out, "kind", PyUnicode_FromString("tcp"));
+        PyObject* local_addr = extract_address(
+                si.psi.soi_proto.pri_tcp.tcpsi_ini.insi_laddr.ina_46, ipv4);
+
+        PyObject* remote_addr = extract_address(
+                si.psi.soi_proto.pri_tcp.tcpsi_ini.insi_faddr.ina_46, ipv4);
+    
+        PyDict_SetItemString(out, "local_addr", local_addr);
+        PyDict_SetItemString(out, "remote_addr", remote_addr);
+
+        long local_port = ntohs(si.psi.soi_proto.pri_tcp.tcpsi_ini.insi_lport);
+        long remote_port = ntohs(si.psi.soi_proto.pri_tcp.tcpsi_ini.insi_fport);
+
+        PyDict_SetItemString(out, "local_port", PyLong_FromLong(local_port));
+        PyDict_SetItemString(out, "remote_port", PyLong_FromLong(remote_port));
+    } else {
+        // non-tcp socket
+        PyObject* local_addr = extract_address(
+                si.psi.soi_proto.pri_in.insi_laddr.ina_46, ipv4);
+
+        PyObject* remote_addr = extract_address(
+                si.psi.soi_proto.pri_in.insi_faddr.ina_46, ipv4);
+    
+        PyDict_SetItemString(out, "local_addr", local_addr);
+        PyDict_SetItemString(out, "remote_addr", remote_addr);
+
+        long local_port = ntohs(si.psi.soi_proto.pri_in.insi_lport);
+        long remote_port = ntohs(si.psi.soi_proto.pri_in.insi_fport);
+
+        PyDict_SetItemString(out, "local_port", PyLong_FromLong(local_port));
+        PyDict_SetItemString(out, "remote_port", PyLong_FromLong(remote_port));
+
+#if 0
+        /*
+         * Enter information for a non-TCP socket.
+         */
+        lp = (int)ntohs(si.psi.soi_proto.pri_in.insi_lport);
+        fa = (unsigned char *)&si.psi.soi_proto.pri_in.insi_faddr.ina_46.i46a_addr4;
+#endif
+    }
+#if 0
+    if ((fa && (*fa == INADDR_ANY)) && !fp) {
+        fa = (unsigned char *)NULL;
+        fp = 0;
+    }
+#endif
+    return out;
+}
+
+
+static void handle_socket(pid_t pid, int fd, PyObject* out) 
+{
+    socket_fdinfo si;
+    int size = proc_pidfdinfo(pid, fd, PROC_PIDFDSOCKETINFO, &si, sizeof(si));
+    if (size <= 0) {
+        PyErr_Format(PyExc_RuntimeError, 
+                "proc_pidfdinfo PROC_PIDFDSOCKETINFO failed, errno %d", errno);
+        return;
+    }
+
+    PyObject* state = PyLong_FromLong(si.psi.soi_state);
+    PyDict_SetItemString(out, "state", state);
+
+    PyObject* details = NULL;
+    switch ((si.psi.soi_family)) {
+    case AF_INET:
+    case AF_INET6:
+        if ((si.psi.soi_kind != SOCKINFO_IN) && (si.psi.soi_kind != SOCKINFO_TCP)) {
+            break;
+        }
+        details = handle_socket_addr(si);
+    };
+
+    if(details != NULL)
+        PyDict_SetItemString(out, "yep", details);
+}
+
 static void handle_vnode(pid_t pid, int fd, PyObject* out) 
 {
-    struct vnode_fdinfowithpath vi;
+    vnode_fdinfowithpath vi;
 
     size_t size = proc_pidfdinfo(pid, fd, PROC_PIDFDVNODEPATHINFO, &vi, sizeof(vi));
     if (size <= 0) {
@@ -28,27 +139,6 @@ static void handle_vnode(pid_t pid, int fd, PyObject* out)
     PyDict_SetItemString(out, "path", value);
 }
 
-static void handle_socket(pid_t pid, int fd, PyObject* out) 
-{
-    struct socket_fdinfo si;
-    int size = proc_pidfdinfo(pid, fd, PROC_PIDFDSOCKETINFO, &si, sizeof(si));
-    if (size <= 0) {
-        PyErr_Format(PyExc_RuntimeError, 
-                "proc_pidfdinfo PROC_PIDFDSOCKETINFO failed, errno %d", errno);
-        return;
-    }
-
-    PyObject* state = PyLong_FromLong(si.psi.soi_state);
-    PyDict_SetItemString(out, "state", state);
-
-#if 0
-    switch ((si.psi.soi_family)) {
-    case AF_INET:
-    case AF_INET6:
-    };
-#endif
-}
-
 static PyObject* get_fd_info(PyObject* *self, PyObject *args)  
 {
     int fd = -1;
@@ -57,7 +147,7 @@ static PyObject* get_fd_info(PyObject* *self, PyObject *args)
         return NULL;
 
     // FIXME: heap alloc
-    struct proc_fdinfo buffer[1024];
+    proc_fdinfo buffer[1024];
 
     int n = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, &buffer, sizeof(buffer));
     if (n <= 0) {
@@ -118,13 +208,13 @@ static PyModuleDef_Slot proc_wrapper_slots[] = {
     {0, NULL}
 };
 
-static struct PyModuleDef proc_wrapper_module = {
+static PyModuleDef proc_wrapper_module = {
     .m_base = PyModuleDef_HEAD_INIT,
     .m_name = "proc_wrapper",
     .m_doc  = "docstring FIXME",
     .m_size = 0, 
+    .m_methods = proc_wrapper_methods,
     .m_slots = proc_wrapper_slots,
-    .m_methods = proc_wrapper_methods
 };
 
 PyMODINIT_FUNC PyInit_proc_wrapper(void) {
