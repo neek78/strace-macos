@@ -244,6 +244,11 @@ class Tracer:
                 msg = f"Failed to launch process: {error}"
                 raise RuntimeError(msg)
 
+            state = process.GetState()
+            if state == self.lldb.eStateExited:
+                msg = f"process failed to launch exited"
+                raise RuntimeError(msg)
+
             # Create reusable decode context (avoids allocations in hot path)
             self.decode_ctx = DecodeContext(tracer=self, process=process)
 
@@ -277,7 +282,8 @@ class Tracer:
 
         target = debugger.CreateTarget("")
         if not target:
-            return None
+            # FIXME: can we get an error reason here?
+            raise StraceError("failed to create target in _setup_debugger_and_attach()")
 
         error = self.lldb.SBError()
         process = target.AttachToProcessWithID(debugger.GetListener(), pid, error)
@@ -287,7 +293,9 @@ class Tracer:
 
         arch = detect_architecture(target)
         if not arch:
-            return None
+            msg = f"Unsupported architecture: {target.GetTriple()}"
+            raise RuntimeError(msg)
+
         self.arch = arch
 
         return debugger, target, process
@@ -323,8 +331,6 @@ class Tracer:
 
         try:
             result = self._setup_debugger_and_attach(pid)
-            if not result:
-                return 1
 
             _debugger, target, process = result
             self._set_syscall_breakpoints(target)
