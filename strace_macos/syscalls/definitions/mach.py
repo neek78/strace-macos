@@ -69,7 +69,20 @@ MACH_TRAPS: list[SyscallDef] = [
     SyscallDef(numbers.TRAP_task_name_for_pid, "task_name_for_pid", params=()),
     SyscallDef(numbers.TRAP_task_for_pid, "task_for_pid", params=()),
     SyscallDef(numbers.TRAP_pid_for_task, "pid_for_task", params=()),
-    SyscallDef(numbers.TRAP_mach_msg2_trap, "mach_msg2_trap", params=()),
+    SyscallDef(
+        numbers.TRAP_mach_msg2_trap, 
+        "mach_msg2_trap", 
+        params=[
+	        PointerParam(),  # void *data,
+            UnsignedParam(), # mach_msg_option64_t options - osfmk/mach/message.h:1044
+            UnsignedParam(), # msgh_bits_and_send_size,
+            UnsignedParam(), # msgh_remote_and_local_port,
+            UnsignedParam(), # msgh_voucher_and_id,
+            UnsignedParam(), # desc_count_and_rcv_name,
+            UnsignedParam(), # rcv_size_and_priority,
+            UnsignedParam()  # timeout
+        ]
+    ),
     SyscallDef(numbers.TRAP_macx_swapon, "macx_swapon", params=()),
     SyscallDef(numbers.TRAP_macx_swapoff, "macx_swapoff", params=()),
     SyscallDef(numbers.TRAP_thread_get_special_reply_port, "thread_get_special_reply_port", params=()),
