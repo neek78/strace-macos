@@ -24,13 +24,10 @@ from strace_macos.syscalls.definitions import (
 
 from strace_macos.syscalls.struct_params import (
     AttrListParam,
-    FssearchblockParam,
-    IntPtrParam,
-    IovecParam,
-    StatfsParam,
-    StatParam,
-    TermiosParam,
-    WinsizeParam,
+)
+
+from strace_macos.syscalls.symbols.mach import (
+    MACH_MSG_OPTION_FLAGS,
 )
 
 MACH_TRAPS: list[SyscallDef] = [
@@ -74,7 +71,7 @@ MACH_TRAPS: list[SyscallDef] = [
         "mach_msg2_trap", 
         params=[
 	        PointerParam(),  # void *data,
-            UnsignedParam(), # mach_msg_option64_t options - osfmk/mach/message.h:1044
+            FlagsParam(MACH_MSG_OPTION_FLAGS), # mach_msg_option64_t options - osfmk/mach/message.h:1044
             UnsignedParam(), # msgh_bits_and_send_size,
             UnsignedParam(), # msgh_remote_and_local_port,
             UnsignedParam(), # msgh_voucher_and_id,
