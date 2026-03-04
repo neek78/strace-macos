@@ -6,6 +6,7 @@ from strace_macos.syscalls.category import SyscallCategory
 from strace_macos.syscalls.definitions.debug import DEBUG_SYSCALLS
 from strace_macos.syscalls.definitions.file import FILE_SYSCALLS
 from strace_macos.syscalls.definitions.ipc import IPC_SYSCALLS
+from strace_macos.syscalls.definitions.mach import MACH_TRAPS 
 from strace_macos.syscalls.definitions.memory import MEMORY_SYSCALLS
 from strace_macos.syscalls.definitions.misc import MISC_SYSCALLS
 from strace_macos.syscalls.definitions.network import NETWORK_SYSCALLS
@@ -43,6 +44,7 @@ class SyscallRegistry:
             (TIME_SYSCALLS, SyscallCategory.TIME),
             (SECURITY_SYSCALLS, SyscallCategory.SECURITY),
             (DEBUG_SYSCALLS, SyscallCategory.DEBUG),
+            (MACH_TRAPS, SyscallCategory.MACH),
         ]
         for syscalls, category in categories:
             for syscall in syscalls:

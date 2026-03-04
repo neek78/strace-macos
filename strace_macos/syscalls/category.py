@@ -23,6 +23,7 @@ class SyscallCategory(Enum):
     SECURITY = auto()  # Security/MAC operations (__mac_*, csops, etc.)
     DEBUG = auto()  # Debugging and tracing (ptrace, kdebug_*, etc.)
     MISC = auto()  # Miscellaneous/uncategorized syscalls
+    MACH = auto()  # Mach traps
 
     def __str__(self) -> str:
         """Return lowercase name for display."""
