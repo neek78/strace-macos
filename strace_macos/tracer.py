@@ -118,6 +118,7 @@ class Tracer:
             "security": SyscallCategory.SECURITY,
             "debug": SyscallCategory.DEBUG,
             "misc": SyscallCategory.MISC,
+            "mach": SyscallCategory.MACH,
         }
 
         if value in category_map:
