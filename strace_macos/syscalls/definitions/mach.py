@@ -28,6 +28,7 @@ from strace_macos.syscalls.struct_params import (
 
 from strace_macos.syscalls.symbols.mach import (
     MACH_MSG_OPTION_FLAGS,
+    MACH_MSG_OPTION64_FLAGS,
 )
 
 MACH_TRAPS: list[SyscallDef] = [
@@ -46,10 +47,24 @@ MACH_TRAPS: list[SyscallDef] = [
     SyscallDef(numbers.TRAP_kernelrpc_mach_port_extract_member_trap, "kernelrpc_mach_port_extract_member_trap", params=()),
     SyscallDef(numbers.TRAP_kernelrpc_mach_port_construct_trap, "kernelrpc_mach_port_construct_trap", params=()),
     SyscallDef(numbers.TRAP_kernelrpc_mach_port_destruct_trap, "kernelrpc_mach_port_destruct_trap", params=()),
-    SyscallDef(numbers.TRAP_mach_reply_port, "mach_reply_port", params=()),
+    SyscallDef(
+        numbers.TRAP_mach_reply_port, 
+        "mach_reply_port", 
+        params=[ # no params
+        ]
+    ),
     SyscallDef(numbers.TRAP_thread_self_trap, "thread_self_trap", params=()),
-    SyscallDef(numbers.TRAP_task_self_trap, "task_self_trap", params=()),
-    SyscallDef(numbers.TRAP_host_self_trap, "host_self_trap", params=()),
+    SyscallDef(
+        numbers.TRAP_task_self_trap, 
+        "task_self_trap", 
+        params=[] # no params
+    ),
+    SyscallDef(
+        numbers.TRAP_host_self_trap, 
+        "host_self_trap", 
+        params=[ # no params
+        ]
+    ),
     SyscallDef(numbers.TRAP_mach_msg_trap, "mach_msg_trap", params=()),
     SyscallDef(numbers.TRAP_mach_msg_overwrite_trap, "mach_msg_overwrite_trap", params=()),
     SyscallDef(numbers.TRAP_semaphore_signal_trap, "semaphore_signal_trap", params=()),
@@ -71,7 +86,7 @@ MACH_TRAPS: list[SyscallDef] = [
         "mach_msg2_trap", 
         params=[
 	        PointerParam(),  # void *data,
-            FlagsParam(MACH_MSG_OPTION_FLAGS), # mach_msg_option64_t options - osfmk/mach/message.h:1044
+            FlagsParam(MACH_MSG_OPTION64_FLAGS), # mach_msg_option64_t options - osfmk/mach/message.h:1044
             UnsignedParam(), # msgh_bits_and_send_size,
             UnsignedParam(), # msgh_remote_and_local_port,
             UnsignedParam(), # msgh_voucher_and_id,
@@ -82,7 +97,12 @@ MACH_TRAPS: list[SyscallDef] = [
     ),
     SyscallDef(numbers.TRAP_macx_swapon, "macx_swapon", params=()),
     SyscallDef(numbers.TRAP_macx_swapoff, "macx_swapoff", params=()),
-    SyscallDef(numbers.TRAP_thread_get_special_reply_port, "thread_get_special_reply_port", params=()),
+    SyscallDef(
+        numbers.TRAP_thread_get_special_reply_port, 
+        "thread_get_special_reply_port", 
+        params=[ # no params
+        ]
+    ),
     SyscallDef(numbers.TRAP_macx_triggers, "macx_triggers", params=()),
     SyscallDef(numbers.TRAP_macx_backing_store_suspend, "macx_backing_store_suspend", params=()),
     SyscallDef(numbers.TRAP_macx_backing_store_recovery, "macx_backing_store_recovery", params=()),
