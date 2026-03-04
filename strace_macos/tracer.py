@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 
     from strace_macos.syscalls.definitions import Param
 
+from strace_macos.exceptions import StraceError
 
 @dataclass
 class Tracer:
@@ -282,7 +283,7 @@ class Tracer:
         process = target.AttachToProcessWithID(debugger.GetListener(), pid, error)
 
         if not process or not process.IsValid():
-            return None
+            raise StraceError(str(error))
 
         arch = detect_architecture(target)
         if not arch:
@@ -347,9 +348,6 @@ class Tracer:
                 print(summary, end="", file=self.output_handle)
 
             return exit_code  # noqa: TRY300
-
-        except Exception:  # noqa: BLE001
-            return 1
 
         finally:
             if self.output_handle and self.output_file is not None:
