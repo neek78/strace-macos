@@ -5,7 +5,7 @@ from strace_macos.syscalls import numbers
 from strace_macos.syscalls.definitions import (
     BufferParam,
     ConstParam,
-#    CustomParam,
+    CustomParam,
 #    DirFdParam,
 #    FileDescriptorParam,
     FlagsParam,
@@ -20,6 +20,7 @@ from strace_macos.syscalls.definitions import (
 #    UidGidParam,
     UnsignedParam,
 #    VariantParam,
+    MachMsg2Param
 )
 
 #from strace_macos.syscalls.struct_params import (
@@ -180,13 +181,14 @@ MACH_TRAPS: list[SyscallDef] = [
             FlagsParam(
                 MACH_MSG_OPTION64_FLAGS
             ),  # mach_msg_option64_t options - osfmk/mach/message.h:1044
+            MachMsg2Param(),
             UnsignedParam(),  # 
-            UnsignedParam(),  # msgh_remote_and_local_port,
-            UnsignedParam(),  # msgh_voucher_and_id,
-            UnsignedParam(),  # desc_count_and_rcv_name,
-            UnsignedParam(),  # rcv_size_and_priority,
+            UnsignedParam(),  # 
+            UnsignedParam(),  # timeout
+            UnsignedParam(),  # timeout
             UnsignedParam(),  # timeout
         ],
+        display_name = "mach_msg2"
     ),
     SyscallDef(numbers.TRAP_macx_swapon, "macx_swapon", params=()),
     SyscallDef(numbers.TRAP_macx_swapoff, "macx_swapoff", params=()),

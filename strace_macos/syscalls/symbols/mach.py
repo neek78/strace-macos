@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 MACH_MSG_OPTION_FLAGS: dict[int, str] = {
     0x00000000: 'MACH_MSG_OPTION_NONE',
     0x00000001: 'MACH_SEND_MSG',
@@ -85,3 +87,4 @@ MACH_MSG_OPTION64_FLAGS: dict[int, str] = {
     0x4000000000000000: 'MACH64_PEEK_MSG',
     0x8000000000000000: 'MACH64_MACH_MSG2',
 }
+
