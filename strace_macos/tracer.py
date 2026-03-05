@@ -369,8 +369,16 @@ class Tracer:
         # Set breakpoints on all syscalls registered in the registry
         # We use plain function names (no underscores) which are the libc wrappers
         # that all programs call, regardless of compilation flags
+        count = 0
         for syscall_def in self.registry.get_all_syscalls():
-            target.BreakpointCreateByName(syscall_def.name)
+            bp = target.BreakpointCreateByName(syscall_def.name)
+            if len(bp.locations) != 1:
+                print("FAIL:", bp)
+                count += 1
+            else:
+                #print("OK:", bp)
+                pass
+        print("problematic breakpoints", count, "of", len(self.registry.get_all_syscalls()))
 
     def _trace_loop(self, process: lldb.SBProcess) -> int:
         """Main tracing loop.

@@ -661,6 +661,21 @@ class VariantParam(Param):
 
 
 @dataclass
+class Packed2Param(Param):
+    """Parameter decoder for packed parameters. 
+
+       These are used in mach traps (eg mach_msg2_internal) - two 32 bit values
+       packed in to 64 bits
+    """
+
+    hi_param: Param
+    lo_param: Param
+
+    def decode(self, ctx: DecodeContext) -> SyscallArg:
+        signed_val = self._to_signed_int(ctx.raw_value)
+        #return IntArg(signed_val, symbolic)
+
+@dataclass
 class SyscallDef:
     """Definition of a single syscall.
 

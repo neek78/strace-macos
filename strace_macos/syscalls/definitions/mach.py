@@ -5,25 +5,26 @@ from strace_macos.syscalls import numbers
 from strace_macos.syscalls.definitions import (
     BufferParam,
     ConstParam,
-    CustomParam,
-    DirFdParam,
-    FileDescriptorParam,
+#    CustomParam,
+#    DirFdParam,
+#    FileDescriptorParam,
     FlagsParam,
-    FlockOpParam,
+#    FlockOpParam,
     IntParam,
-    OctalParam,
+#    OctalParam,
+    Packed2Param,
     ParamDirection,
     PointerParam,
     StringParam,
     SyscallDef,
-    UidGidParam,
+#    UidGidParam,
     UnsignedParam,
-    VariantParam,
+#    VariantParam,
 )
 
-from strace_macos.syscalls.struct_params import (
-    AttrListParam,
-)
+#from strace_macos.syscalls.struct_params import (
+#    AttrListParam,
+#)
 
 from strace_macos.syscalls.symbols.mach import (
     MACH_MSG_OPTION_FLAGS,
@@ -33,31 +34,31 @@ from strace_macos.syscalls.symbols.mach import (
 MACH_TRAPS: list[SyscallDef] = [
     SyscallDef(
         numbers.TRAP_kernelrpc_mach_vm_allocate_trap,
-        "kernelrpc_mach_vm_allocate_trap,",
+        "_kernelrpc_mach_vm_allocate",
         params=(),
     ),
     SyscallDef(
         numbers.TRAP_kernelrpc_mach_vm_purgable_control_trap,
-        "kernelrpc_mach_vm_purgable_control_trap,",
+        "_kernelrpc_mach_vm_purgable_control",
         params=(),
     ),
     SyscallDef(
         numbers.TRAP_kernelrpc_mach_vm_deallocate_trap,
-        "kernelrpc_mach_vm_deallocate_trap",
+        "_kernelrpc_mach_vm_deallocate",
         params=(),
     ),
     SyscallDef(
         numbers.TRAP_task_dyld_process_info_notify_get_trap,
-        "task_dyld_process_info_notify_get_trap ",
+        "task_dyld_process_info_notify_get",
         params=(),
     ),
     SyscallDef(
         numbers.TRAP_kernelrpc_mach_vm_protect_trap,
-        "kernelrpc_mach_vm_protect_trap",
+        "_kernelrpc_mach_vm_protect",
         params=(),
     ),
     SyscallDef(
-        numbers.TRAP_kernelrpc_mach_vm_map_trap, "kernelrpc_mach_vm_map_trap", params=()
+        numbers.TRAP_kernelrpc_mach_vm_map_trap, "_kernelrpc_mach_vm_map", params=()
     ),
     SyscallDef(
         numbers.TRAP_kernelrpc_mach_port_allocate_trap,
@@ -165,6 +166,10 @@ MACH_TRAPS: list[SyscallDef] = [
     # 	mach_port_t rcv_name,
     # 	uint64_t timeout,
     # 	uint32_t priority)
+    # typedef struct {
+    #   mach_msg_header_t             header;
+    #   mach_msg_body_t               body;
+    #   mach_msg_base_t;
     SyscallDef(
         numbers.TRAP_mach_msg2_trap,
         "mach_msg2_trap",
@@ -173,7 +178,9 @@ MACH_TRAPS: list[SyscallDef] = [
             FlagsParam(
                 MACH_MSG_OPTION64_FLAGS
             ),  # mach_msg_option64_t options - osfmk/mach/message.h:1044
-            UnsignedParam(),  # msgh_bits_and_send_size,
+            Packed2Param(
+                hi_param = IntParam(),   # msgh_bits
+                lo_param = IntParam()),  # send_size
             UnsignedParam(),  # msgh_remote_and_local_port,
             UnsignedParam(),  # msgh_voucher_and_id,
             UnsignedParam(),  # desc_count_and_rcv_name,
