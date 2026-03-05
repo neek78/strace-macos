@@ -392,7 +392,6 @@ class Tracer:
             if self._dump_breakpoint(bp):
                 count += 1
         print("problematic breakpoints", count, "of", len(syscalls))
-        sys.exit(-1)
 
     def _trace_loop(self, process: lldb.SBProcess) -> int:
         """Main tracing loop.
