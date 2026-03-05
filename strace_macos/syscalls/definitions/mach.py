@@ -81,6 +81,19 @@ MACH_TRAPS: list[SyscallDef] = [
     SyscallDef(numbers.TRAP_task_name_for_pid, "task_name_for_pid", params=()),
     SyscallDef(numbers.TRAP_task_for_pid, "task_for_pid", params=()),
     SyscallDef(numbers.TRAP_pid_for_task, "pid_for_task", params=()),
+
+# osfmk/mach/message.h:1493
+#static inline mach_msg_return_t
+#mach_msg2(
+#	void *data,
+#	mach_msg_option64_t option64,
+#	mach_msg_header_t header,
+#	mach_msg_size_t send_size,
+#	mach_msg_size_t rcv_size,
+#	mach_port_t rcv_name,
+#	uint64_t timeout,
+#	uint32_t priority)
+
     SyscallDef(
         numbers.TRAP_mach_msg2_trap, 
         "mach_msg2_trap", 
