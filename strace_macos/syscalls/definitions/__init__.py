@@ -155,6 +155,15 @@ class Param(ABC):
         except (UnicodeDecodeError, AttributeError):
             return f"0x{address:x}"
 
+    def raw_params_consumed(self) -> int:
+        """The number of raw parameters this parameter will consume.
+
+        In most cases, a single Param object will consume one raw parameter.
+        
+        There are some more convoluted cases (eg MachMsg2Param) where the parameter
+        decoder needs to consider multiple parameters in one pass.
+        """
+        return 1
 
 class IntParam(Param):
     """Parameter decoder for signed integers."""
@@ -675,8 +684,6 @@ class MachMsg2Param(Param):
             lo = val & 0xffffffff
             return hi, lo
 
-        #print(ctx.all_args)
-
         header_msgh_bits, send_size = split(ctx.all_args[2])
         header_msgh_remote_port, header_msgh_local_port = split(ctx.all_args[3])
         header_msgh_voucher_port, header_msgh_id = split(ctx.all_args[4])
@@ -693,26 +700,18 @@ class MachMsg2Param(Param):
             "msgh_id":header_msgh_id  
         })
 
-        return header, UnsignedArg(send_size), UnsignedArg(rcv_size), UnsignedArg(rcv_name), UnsignedArg(timeout), UnsignedArg(priority)
-        #timeout
+        return [
+            header, 
+            UnsignedArg(send_size), 
+            UnsignedArg(rcv_size), 
+            UnsignedArg(rcv_name), 
+            UnsignedArg(timeout), 
+            UnsignedArg(priority)
+        ]
 
-
-
-        # Skip if discriminator says this arg doesn't exist (exact match)
-        #if disc_value in self.skip_for:
-        #    return SkipArg()  # Mark for removal from output
-
-        # Skip if required flag bits are not set (for open/O_CREAT etc.)
-        #if self.skip_when_not_set is not None and (disc_value & self.skip_when_not_set) == 0:
-        #    return SkipArg()  # Flag bit not set, arg doesn't exist
-
-        # Get the right param for this discriminator value
-        #param = self.variants.get(disc_value, self.default_param)
-        #if param is None:
-        #    return PointerArg(ctx.raw_value)
-
-        # Decode using the selected param
-        #return param.decode(ctx)
+    def raw_params_consumed(self) -> int:
+        # we consume the latter 6 (of 8) parameters
+        return 6
 
 @dataclass
 class SyscallDef:

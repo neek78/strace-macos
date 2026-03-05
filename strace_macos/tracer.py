@@ -171,6 +171,7 @@ class Tracer:
             event: The syscall event to write
         """
         # Always add to summary
+
         self.summary_formatter.add_event(event)
 
         # Skip writing individual events if summary-only mode
@@ -645,6 +646,7 @@ class Tracer:
         if not self.decode_ctx:
             return UnknownArg()
 
+        #print("PARAM",param)
         self.decode_ctx.raw_value = raw_value
         decoded = param.decode(self.decode_ctx)
         return decoded if decoded is not None else UnknownArg()
@@ -667,12 +669,18 @@ class Tracer:
             variadic_start: Index where variadic args start (passed on stack on ARM64)
 
         Returns:
-            Tuple of (decoded_args, raw_values) where raw_values are saved for exit-time decoding
+            Tuple of (decoded_args, raw_values) where raw_values are saved for exit-time 
+            decoding
         """
-        # First, read all raw register/stack values
+        # determine number of parameters
+        param_count = 0
+        for p in params:
+            param_count += p.raw_params_consumed()
+
+        # Read all raw register/stack values
         raw_values = [
             self._read_raw_arg_value(frame, process, i, arg_regs, variadic_start)
-            for i in range(len(params))
+            for i in range(param_count)
         ]
 
         # Update context with per-syscall data (shared across all arguments)
@@ -682,12 +690,26 @@ class Tracer:
             self.decode_ctx.return_value = None
 
         # Now decode each argument using its Param
-        args = [
-            self._decode_param_with_context(param, raw_values[i])
-            if i < len(raw_values)
-            else UnknownArg()
-            for i, param in enumerate(params)
-        ]
+        #args = [
+        #    self._decode_param_with_context(param, raw_values[i])
+        #    if i < len(raw_values)
+        #    else UnknownArg()
+        #    for i, param in enumerate(params)
+        #]
+
+        i = 0
+        args = []
+        while i < len(raw_values):
+            if i < len(params):
+                param = params[i]
+                res = self._decode_param_with_context(param, raw_values[i])
+                if isinstance(res, list):
+                    args.extend(res)
+                else:
+                    args.append(res)
+                i += param.raw_params_consumed()
+            else:
+                args.append(UnknownArg())
 
         return args, raw_values
 
@@ -721,5 +743,5 @@ class Tracer:
                 decoded = None
 
             # Only update if decode returned something (not None)
-            if decoded is not None:
-                event.args[i] = decoded
+            #if decoded is not None:
+            #    event.args[i] = decoded

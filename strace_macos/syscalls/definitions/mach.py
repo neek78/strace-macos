@@ -6,26 +6,21 @@ from strace_macos.syscalls.definitions import (
     BufferParam,
     ConstParam,
     CustomParam,
-#    DirFdParam,
 #    FileDescriptorParam,
     FlagsParam,
-#    FlockOpParam,
     IntParam,
-#    OctalParam,
-    #Packed2Param,
     ParamDirection,
     PointerParam,
     StringParam,
     SyscallDef,
-#    UidGidParam,
     UnsignedParam,
-#    VariantParam,
-    MachMsg2Param
+    MachMsg2Param,
 )
 
-#from strace_macos.syscalls.struct_params import (
-#    AttrListParam,
-#)
+from strace_macos.syscalls.struct_params import (
+    MachTimebaseInfoParam
+)
+
 
 from strace_macos.syscalls.symbols.mach import (
     MACH_MSG_OPTION_FLAGS,
@@ -157,22 +152,6 @@ MACH_TRAPS: list[SyscallDef] = [
     SyscallDef(numbers.TRAP_task_for_pid, "task_for_pid", params=[]),
     SyscallDef(numbers.TRAP_pid_for_task, "pid_for_task", params=[]),
 
-    # osfmk/mach/message.h:1493
-    # static inline mach_msg_return_t
-    # mach_msg2(
-    # 	void *data,
-    # 	mach_msg_option64_t option64,
-    # 	mach_msg_header_t header,
-    # 	mach_msg_size_t send_size,
-    # 	mach_msg_size_t rcv_size,
-    # 	mach_port_t rcv_name,
-    # 	uint64_t timeout,
-    # 	uint32_t priority)
-    # typedef struct {
-    #   mach_msg_header_t             header;
-    #   mach_msg_body_t               body;
-    #   mach_msg_base_t;
-
     SyscallDef(
         numbers.TRAP_mach_msg2_trap,
         "mach_msg2_trap",
@@ -181,12 +160,7 @@ MACH_TRAPS: list[SyscallDef] = [
             FlagsParam(
                 MACH_MSG_OPTION64_FLAGS
             ),  # mach_msg_option64_t options - osfmk/mach/message.h:1044
-            MachMsg2Param(),
-            UnsignedParam(),  # 
-            UnsignedParam(),  # 
-            UnsignedParam(),  # timeout
-            UnsignedParam(),  # timeout
-            UnsignedParam(),  # timeout
+            MachMsg2Param()
         ],
         display_name = "mach_msg2"
     ),
@@ -211,12 +185,6 @@ MACH_TRAPS: list[SyscallDef] = [
     SyscallDef(numbers.TRAP_thread_switch, "thread_switch", params=[]),
     SyscallDef(numbers.TRAP_clock_sleep_trap, "clock_sleep_trap", params=[]),
 
-    #kern_return_t
-    #host_create_mach_voucher(
-    #    mach_port_name_t host,
-    #    mach_voucher_attr_raw_recipe_array_t recipes,
-    #    mach_voucher_attr_recipe_size_t recipesCnt,
-    #    mach_port_name_t *voucher)
     SyscallDef(
         numbers.TRAP_host_create_mach_voucher_trap,
         "host_create_mach_voucher",
@@ -225,7 +193,6 @@ MACH_TRAPS: list[SyscallDef] = [
             PointerParam(), # recipes - FIXME: what does this actually point at?
             UnsignedParam(), # recipesCnt
             PointerParam(), # voucher
-
         ],
     ),
     SyscallDef(
@@ -245,7 +212,9 @@ MACH_TRAPS: list[SyscallDef] = [
     ),
     SyscallDef(numbers.TRAP__exclaves_ctl_trap, "_exclaves_ctl_trap", params=[]),
     SyscallDef(
-        numbers.TRAP_mach_timebase_info_trap, "mach_timebase_info", params=[]
+        numbers.TRAP_mach_timebase_info_trap, "mach_timebase_info", params=[
+            MachTimebaseInfoParam(ParamDirection.OUT),
+        ]
     ),
     SyscallDef(numbers.TRAP_mach_wait_until_trap, "mach_wait_until", params=[]),
     SyscallDef(numbers.TRAP_mk_timer_create_trap, "mk_timer_create", params=[]),

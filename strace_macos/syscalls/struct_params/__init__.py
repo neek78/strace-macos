@@ -26,6 +26,7 @@ from strace_macos.syscalls.struct_params.ipc_structs import (
     SemidDsParam,
     ShmidDsParam,
 )
+from strace_macos.syscalls.struct_params.mach_structs import MachTimebaseInfoParam
 from strace_macos.syscalls.struct_params.msghdr import MsghdrParam
 from strace_macos.syscalls.struct_params.sigevent import SigeventParam
 from strace_macos.syscalls.struct_params.signal_structs import (
@@ -51,6 +52,7 @@ __all__ = [
     "IovecParam",
     "Kevent64Param",
     "KeventParam",
+    "MachTimebaseInfoParam",
     "MsghdrParam",
     "MsqidDsParam",
     "PollfdParam",
