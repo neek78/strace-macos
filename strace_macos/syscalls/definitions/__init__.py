@@ -659,29 +659,14 @@ class VariantParam(Param):
         # Decode using the selected param
         return param.decode(ctx)
 
-
-@dataclass
-class Packed2Param(Param):
-    """Parameter decoder for packed parameters. 
-
-       These are used in mach traps (eg mach_msg2_internal) - two 32 bit values
-       packed in to 64 bits
-    """
-
-    hi_param: Param
-    lo_param: Param
-
-    def decode(self, ctx: DecodeContext) -> SyscallArg:
-        signed_val = self._to_signed_int(ctx.raw_value)
-        #return IntArg(signed_val, symbolic)
-
 @dataclass
 class SyscallDef:
     """Definition of a single syscall.
 
     Attributes:
         number: Syscall number (from sys/syscall.h)
-        name: Syscall name (e.g., "open", "read")
+        name: Syscall name (e.g., "open", "read"). This is the name used to 
+                create a breakpoint.
         params: List of Param decoders (one per argument).
                 E.g., [StringParam(), FlagsParam(O_FLAGS), FlagsParam(FILE_MODE)]
                 Position in list determines which argument it decodes.
@@ -690,6 +675,8 @@ class SyscallDef:
         variadic_start: Optional index where variadic arguments start (for fcntl, ioctl).
                 On macOS ARM64, arguments at this index and beyond are passed on the
                 stack instead of in registers.
+        display_name: If not None, this is the name outputted to the user. Otherwise,
+                name is used.
     """
 
     number: int
@@ -697,3 +684,4 @@ class SyscallDef:
     params: list[Param]
     return_decoder: ReturnDecoder | None = None
     variadic_start: int | None = None
+    display_name: str | None = None

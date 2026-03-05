@@ -12,7 +12,7 @@ from strace_macos.syscalls.definitions import (
 #    FlockOpParam,
     IntParam,
 #    OctalParam,
-    Packed2Param,
+    #Packed2Param,
     ParamDirection,
     PointerParam,
     StringParam,
@@ -155,6 +155,7 @@ MACH_TRAPS: list[SyscallDef] = [
     SyscallDef(numbers.TRAP_task_name_for_pid, "task_name_for_pid", params=[]),
     SyscallDef(numbers.TRAP_task_for_pid, "task_for_pid", params=[]),
     SyscallDef(numbers.TRAP_pid_for_task, "pid_for_task", params=[]),
+
     # osfmk/mach/message.h:1493
     # static inline mach_msg_return_t
     # mach_msg2(
@@ -170,6 +171,7 @@ MACH_TRAPS: list[SyscallDef] = [
     #   mach_msg_header_t             header;
     #   mach_msg_body_t               body;
     #   mach_msg_base_t;
+
     SyscallDef(
         numbers.TRAP_mach_msg2_trap,
         "mach_msg2_trap",
@@ -178,9 +180,7 @@ MACH_TRAPS: list[SyscallDef] = [
             FlagsParam(
                 MACH_MSG_OPTION64_FLAGS
             ),  # mach_msg_option64_t options - osfmk/mach/message.h:1044
-            Packed2Param(
-                hi_param = IntParam(),   # msgh_bits
-                lo_param = IntParam()),  # send_size
+            UnsignedParam(),  # 
             UnsignedParam(),  # msgh_remote_and_local_port,
             UnsignedParam(),  # msgh_voucher_and_id,
             UnsignedParam(),  # desc_count_and_rcv_name,

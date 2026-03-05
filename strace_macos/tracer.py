@@ -382,13 +382,12 @@ class Tracer:
         # that all programs call, regardless of compilation flags
         count = 0
 
-        print("FC", self.filter_category)
+        #print("FC", self.filter_category)
         syscalls = self.registry.get_syscalls_by_category_list(self.filter_category)
-        print("syscall len", len(syscalls))
+        #print("syscall len", len(syscalls))
         for syscall_def in syscalls:
-            bp = target.BreakpointCreateByName(syscall_def.name
- #                                              ,"libsystem_kernel.dylib")
-                                               )
+            bp = target.BreakpointCreateByName(syscall_def.name,
+                                                "libsystem_kernel.dylib")
             if self._dump_breakpoint(bp):
                 count += 1
         print("problematic breakpoints", count, "of", len(syscalls))
