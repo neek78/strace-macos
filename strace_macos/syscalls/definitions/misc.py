@@ -80,4 +80,14 @@ MISC_SYSCALLS: list[SyscallDef] = [
         "thread_selfcounts",
         params=[IntParam(), PointerParam(), UnsignedParam()],
     ),  # 186
+    #SyscallDef(
+    #    numbers.SYS_proc_info,
+    #    "__proc_info",
+    #    params=[],
+    #),  # 336
+    #SyscallDef(
+    #    numbers.SYS_proc_info_extended_id,
+    #    "__proc_info_extended_id",
+    #    params=[],
+    #),  # 545
 ]

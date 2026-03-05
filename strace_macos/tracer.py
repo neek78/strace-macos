@@ -127,6 +127,7 @@ class Tracer:
             # It's a comma-separated list of syscalls
             self.filtered_syscalls = set(value.split(","))
 
+
     def _should_trace_syscall(self, syscall_name: str) -> bool:
         """Check if a syscall should be traced based on filters.
 
@@ -360,6 +361,16 @@ class Tracer:
             if self.output_handle and self.output_file is not None:
                 self.output_handle.close()
 
+    def _dump_breakpoint(self, bp: lldb.SBBreakpoint) -> None:
+        if len(bp.locations) != 1:
+            print("FAIL:", bp)
+            for l in bp.locations:
+                print ("  ", l)
+            return True
+        else:
+            #print("OK:", bp)
+            pass
+
     def _set_syscall_breakpoints(self, target: lldb.SBTarget) -> None:
         """Set breakpoints on syscall entry points.
 
@@ -370,15 +381,18 @@ class Tracer:
         # We use plain function names (no underscores) which are the libc wrappers
         # that all programs call, regardless of compilation flags
         count = 0
-        for syscall_def in self.registry.get_all_syscalls():
-            bp = target.BreakpointCreateByName(syscall_def.name)
-            if len(bp.locations) != 1:
-                print("FAIL:", bp)
+
+        print("FC", self.filter_category)
+        syscalls = self.registry.get_syscalls_by_category_list(self.filter_category)
+        print("syscall len", len(syscalls))
+        for syscall_def in syscalls:
+            bp = target.BreakpointCreateByName(syscall_def.name
+ #                                              ,"libsystem_kernel.dylib")
+                                               )
+            if self._dump_breakpoint(bp):
                 count += 1
-            else:
-                #print("OK:", bp)
-                pass
-        print("problematic breakpoints", count, "of", len(self.registry.get_all_syscalls()))
+        print("problematic breakpoints", count, "of", len(syscalls))
+        sys.exit(-1)
 
     def _trace_loop(self, process: lldb.SBProcess) -> int:
         """Main tracing loop.

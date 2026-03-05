@@ -20,6 +20,7 @@ from strace_macos.syscalls.definitions.time import TIME_SYSCALLS
 if TYPE_CHECKING:
     from strace_macos.syscalls.definitions import SyscallDef
 
+import sys
 
 class SyscallRegistry:
     """Central registry for all syscall definitions."""
@@ -98,6 +99,36 @@ class SyscallRegistry:
             List of syscall definitions in the category
         """
         return [self._by_name[name] for name, cat in self._categories.items() if cat == category]
+
+    def get_syscalls_by_category_list(self, categories: list(SyscallCategory)) -> list[SyscallDef]:
+        """Get the union of syscalls contained within the categories specified.
+
+        Args:
+            categories: a list of categories to filter by
+                If none, return all syscalls.
+                If an empty list, return an empty list.
+
+        Returns:
+            List of syscall definitions in the categories.
+        """
+        #print("CAT", categories)
+        #print("CAT", type(categories))
+        # print("CAt2", self._categories.items())
+
+        if categories is None:
+            return self.get_all_syscalls()
+
+        c = [categories]
+
+        #print("c", c)
+        #print("categories", c)
+        #for name, cat in self._categories.items():
+        #    print("n", name, "c", cat, type(cat))
+        #    print("cinc", cat, cat in c)
+
+
+        return [self._by_name[name] 
+                for name, cat in self._categories.items() if cat in c]
 
     def get_all_syscalls(self) -> list[SyscallDef]:
         """Get all registered syscalls.

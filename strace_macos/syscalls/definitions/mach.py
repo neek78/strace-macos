@@ -62,47 +62,47 @@ MACH_TRAPS: list[SyscallDef] = [
     ),
     SyscallDef(
         numbers.TRAP_kernelrpc_mach_port_allocate_trap,
-        "kernelrpc_mach_port_allocate_trap",
+        "_kernelrpc_mach_port_allocate",
         params=(),
     ),
     SyscallDef(
         numbers.TRAP_kernelrpc_mach_port_deallocate_trap,
-        "kernelrpc_mach_port_deallocate_trap",
+        "_kernelrpc_mach_port_deallocate",
         params=(),
     ),
     SyscallDef(
         numbers.TRAP_kernelrpc_mach_port_mod_refs_trap,
-        "kernelrpc_mach_port_mod_refs_trap",
+        "_kernelrpc_mach_port_mod_refs",
         params=(),
     ),
     SyscallDef(
         numbers.TRAP_kernelrpc_mach_port_move_member_trap,
-        "kernelrpc_mach_port_move_member_trap",
+        "_kernelrpc_mach_port_move_member",
         params=(),
     ),
     SyscallDef(
         numbers.TRAP_kernelrpc_mach_port_insert_right_trap,
-        "kernelrpc_mach_port_insert_right_trap",
+        "_kernelrpc_mach_port_insert_right",
         params=(),
     ),
     SyscallDef(
         numbers.TRAP_kernelrpc_mach_port_insert_member_trap,
-        "kernelrpc_mach_port_insert_member_trap",
+        "_kernelrpc_mach_port_insert_member",
         params=(),
     ),
     SyscallDef(
         numbers.TRAP_kernelrpc_mach_port_extract_member_trap,
-        "kernelrpc_mach_port_extract_member_trap",
+        "_kernelrpc_mach_port_extract_member",
         params=(),
     ),
     SyscallDef(
         numbers.TRAP_kernelrpc_mach_port_construct_trap,
-        "kernelrpc_mach_port_construct_trap",
+        "_kernelrpc_mach_port_construct",
         params=(),
     ),
     SyscallDef(
         numbers.TRAP_kernelrpc_mach_port_destruct_trap,
-        "kernelrpc_mach_port_destruct_trap",
+        "_kernelrpc_mach_port_destruct",
         params=(),
     ),
     SyscallDef(numbers.TRAP_mach_reply_port, "mach_reply_port", params=[]),  # no params
@@ -136,7 +136,7 @@ MACH_TRAPS: list[SyscallDef] = [
     ),
     SyscallDef(
         numbers.TRAP__kernelrpc_mach_port_get_attributes_trap,
-        "_kernelrpc_mach_port_get_attributes_trap ",
+        "_kernelrpc_mach_port_get_attributes_trap",
         params=(),
     ),
     SyscallDef(
@@ -204,14 +204,13 @@ MACH_TRAPS: list[SyscallDef] = [
         "macx_backing_store_recovery",
         params=(),
     ),
-    SyscallDef(numbers.TRAP_pfz_exit, "pfx_exit", params=()),
     SyscallDef(numbers.TRAP_swtch_pri, "swtch_pri", params=()),
     SyscallDef(numbers.TRAP_swtch, "swtch", params=()),
     SyscallDef(numbers.TRAP_thread_switch, "thread_switch", params=()),
     SyscallDef(numbers.TRAP_clock_sleep_trap, "clock_sleep_trap", params=()),
     SyscallDef(
         numbers.TRAP_host_create_mach_voucher_trap,
-        "host_create_mach_voucher_trap ",
+        "host_create_mach_voucher",
         params=(),
     ),
     SyscallDef(
@@ -231,15 +230,15 @@ MACH_TRAPS: list[SyscallDef] = [
     ),
     SyscallDef(numbers.TRAP__exclaves_ctl_trap, "_exclaves_ctl_trap", params=()),
     SyscallDef(
-        numbers.TRAP_mach_timebase_info_trap, "mach_timebase_info_trap ", params=()
+        numbers.TRAP_mach_timebase_info_trap, "mach_timebase_info", params=()
     ),
-    SyscallDef(numbers.TRAP_mach_wait_until_trap, "mach_wait_until_trap", params=()),
-    SyscallDef(numbers.TRAP_mk_timer_create_trap, "mk_timer_create_trap", params=()),
-    SyscallDef(numbers.TRAP_mk_timer_destroy_trap, "mk_timer_destroy_trap", params=()),
-    SyscallDef(numbers.TRAP_mk_timer_arm_trap, "mk_timer_arm_trap", params=()),
-    SyscallDef(numbers.TRAP_mk_timer_cancel_trap, "mk_timer_cancel_trap ", params=()),
+    SyscallDef(numbers.TRAP_mach_wait_until_trap, "mach_wait_until", params=()),
+    SyscallDef(numbers.TRAP_mk_timer_create_trap, "mk_timer_create", params=()),
+    SyscallDef(numbers.TRAP_mk_timer_destroy_trap, "mk_timer_destroy", params=()),
+    SyscallDef(numbers.TRAP_mk_timer_arm_trap, "mk_timer_arm", params=()),
+    SyscallDef(numbers.TRAP_mk_timer_cancel_trap, "mk_timer_cancel", params=()),
     SyscallDef(
-        numbers.TRAP_mk_timer_arm_leeway_trap, "mk_timer_arm_leeway_trap", params=()
+        numbers.TRAP_mk_timer_arm_leeway_trap, "mk_timer_arm_leeway", params=()
     ),
     SyscallDef(
         numbers.TRAP_debug_control_port_for_pid, "debug_control_port_for_pid", params=()
