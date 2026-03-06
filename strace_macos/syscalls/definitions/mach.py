@@ -14,13 +14,12 @@ from strace_macos.syscalls.definitions import (
     StringParam,
     SyscallDef,
     UnsignedParam,
-    MachMsg2Param,
 )
 
 from strace_macos.syscalls.struct_params import (
+    MachMsg2Param,
     MachTimebaseInfoParam
 )
-
 
 from strace_macos.syscalls.symbols.mach import (
     MACH_MSG_OPTION_FLAGS,
