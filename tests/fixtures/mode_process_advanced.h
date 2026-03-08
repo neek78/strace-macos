@@ -130,6 +130,11 @@ int mode_process_advanced(int argc, char *argv[]) {
   }
 
   /* === PROC_INFO TESTS === */
+  char list[1024];
+  ret = proc_listallpids(list, sizeof(list));
+  if (ret <= 0) {
+    perror("proc_pidinfo(PROC_PIDTBSDINFO) failed");
+  }
 
   /* Test proc_info() with PROC_PIDTBSDINFO - get BSD process info */
   struct proc_bsdinfo bsdinfo;
@@ -164,6 +169,12 @@ int mode_process_advanced(int argc, char *argv[]) {
   ret = proc_pidpath(pid, pathbuf, sizeof(pathbuf));
   if (ret <= 0) {
     perror("proc_pidpath failed");
+  }
+
+  // proc_pidfdinfo(int pid, int fd, int flavor, void * buffer, int buffersize)
+  ret = proc_pidfdinfo(pid, 2, PROC_PIDFDVNODEPATHINFO, pathbuf, sizeof(pathbuf));
+  if (ret <= 0) {
+    perror("proc_pidfdinfo failed");
   }
 
   /* === THREAD TESTS === */

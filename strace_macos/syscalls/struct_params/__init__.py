@@ -54,6 +54,7 @@ __all__ = [
     "MsghdrParam",
     "MsqidDsParam",
     "PollfdParam",
+    "ProcInfoFlavorParam",
     "SembufParam",
     "SemidDsParam",
     "ShmidDsParam",

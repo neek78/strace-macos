@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import ctypes
 from typing import ClassVar
 
-from strace_macos.syscalls.definitions import ParamDirection, StructParamBase
+from strace_macos.syscalls.definitions import ConstParam,IntParam,ParamDirection, StructParamBase, Param
+
+from strace_macos.syscalls.symbols.process import (
+    PROC_INFO_FLAVOR
+)
 
 # RLIM_INFINITY from sys/resource.h: (((__uint64_t)1 << 63) - 1)
 RLIM_INFINITY = (1 << 63) - 1  # 0x7fffffffffffffff
@@ -134,8 +139,26 @@ class RusageParam(StructParamBase):
         """Format microseconds field of timeval."""
         return f"{value}µs"
 
+@dataclass
+class ProcInfoFlavorParam(Param):
+    """
+    """
+
+    callnum_index: int
+    def decode(self, ctx: DecodeContext) -> SyscallArg | None:
+        callnum = ctx.all_args[self.callnum_index]
+
+        # __proc_info() is a multiplexer for many calls.
+        # The valid values for flavor are dependent on which callnum
+        # is happening. See if we have a valid set for this callnum...
+        if callnum in PROC_INFO_FLAVOR:
+            d = PROC_INFO_FLAVOR[callnum]
+            return ConstParam(d).decode(ctx)
+        else:
+            return IntParam().decode(ctx)
 
 __all__ = [
+    "ProcInfoFlavorParam",
     "RlimitParam",
     "RusageParam",
 ]

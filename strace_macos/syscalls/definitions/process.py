@@ -21,12 +21,14 @@ from strace_macos.syscalls.definitions import (
 )
 from strace_macos.syscalls.struct_params import IntArrayParam, IntPtrParam
 from strace_macos.syscalls.struct_params.process_structs import (
+    ProcInfoFlavorParam,
     RlimitParam,
     RusageParam,
 )
 from strace_macos.syscalls.symbols.process import (
     IDTYPE_CONSTANTS,
     PRIO_WHICH,
+    PROC_INFO_CALLNUM,
     RLIMIT_RESOURCES,
     RUSAGE_WHO,
     WAIT_OPTIONS,
@@ -253,4 +255,16 @@ PROCESS_SYSCALLS: list[SyscallDef] = [
         "coalition_policy_get",
         params=[UnsignedParam(), UnsignedParam(), PointerParam(), UnsignedParam()],
     ),  # 557
+    SyscallDef(
+        numbers.SYS_proc_info,
+        "__proc_info",
+        params=[
+            ConstParam(PROC_INFO_CALLNUM), # callnum
+            IntParam(),                    # pid
+            ProcInfoFlavorParam(callnum_index = 0), # flavor
+            UnsignedParam(),               # arg
+            PointerParam(),                # buffer
+            IntParam(),                    # buffersize
+        ],
+    ),  # 336
 ]

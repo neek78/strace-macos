@@ -156,6 +156,19 @@ class TestProcessAdvanced(unittest.TestCase):
                 "getrusage should decode ru_stime fields"
             )
 
+    def test_proc_info(self) -> None:
+        # there aren't any (direct) c-wrappers for the proc info calls, so
+        # we hook the __proc_info syscall directly which is behind most (all?)
+        # of the proc_ calls.
+        proc_info_calls = sth.filter_syscalls(self.syscalls, "__proc_info")
+        for call in proc_info_calls:
+            #print("\nPIC", call)
+            callnum = call["args"][0]
+            assert callnum in ["PROC_PIDTBSDINFO", "PROC_INFO_CALL_PIDINFO"], (
+                    f"callnum should be PROC_* , got {callnum}"
+                )
+
+    #PROC_INFO_CALL_LISTPIDS
     def test_syscall_coverage(self) -> None:
         """Test that we captured all expected process syscalls."""
         expected_syscalls = {
