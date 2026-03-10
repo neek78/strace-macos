@@ -44,21 +44,23 @@ class SyscallEvent:
         return self.return_value_raw < 0
 
     def format_return_value_raw(self) -> int:
-        """Get raw return value formatted for output"""
+        """Get raw return value appropriate for output, still as its original int type"""
 
-        # If raw value is None, actually is no return value for the rare syscalls
-        # like sync() that don't return anything. To be compatible with linux strace, 
-        # still print =0
+        # For the rare syscalls that don't return anything (eg sync()),
+        # return_value_raw will be None.
+        # To be compatible with linux strace,  still print =0
         if self.return_value_raw is None:
             return 0
         return self.return_value_raw
 
     def format_return_value_as_str(self) -> str:
+        """Format the return value as its annotated form with whatever explanation we've found along the way."""
         ret_str = str(self.format_return_value_raw())
 
         if self.return_value_decoded is not None:
             ret_str += " | " + str(self.return_value_decoded)
         return ret_str
+
 
 def _format_symbolic_or_value(arg: IntArg | FlagsArg) -> str | int:
     """Format IntArg or FlagsArg: prefer symbolic name if available, else value."""
