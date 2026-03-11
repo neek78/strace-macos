@@ -576,51 +576,101 @@ PyObject* handle_inet_socket(ModuleState& state, const socket_fdinfo& si)
 }
 
 
+PyObject* handle_unix_socket(ModuleState& state, const socket_fdinfo& si)
+{
+    PyObject* out = PyDict_New();
+    if(out == NULL) {
+        return NULL;
+    }
+
+    // extract the socket's path(s)... lsof does some pretty whack things here.. we'll just take
+    // the simple route
+    PyObject* path = PyUnicode_FromString(si.psi.soi_proto.pri_un.unsi_addr.ua_sun.sun_path);
+    PyDict_SetItemString(out, "path", path);
+
+    PyObject* cpath = PyUnicode_FromString(si.psi.soi_proto.pri_un.unsi_caddr.ua_sun.sun_path);
+    PyDict_SetItemString(out, "cpath", cpath);
+    return out;
+}
+
+
+// steal the object value, and put it in the dict. Handles NULL for value
+static int set_dict_val_steal_obj(PyObject* dict, const char* name, PyObject* value) {
+    assert(dict != NULL);
+    assert(name != NULL);
+    if (value == NULL) {
+        return -1;
+    }
+
+    int ret = PyDict_SetItemString(dict, name, value);
+    Py_DECREF(value);
+    return ret;
+}
+
+static int set_dict_val(PyObject* dict, const char* name, unsigned long value) {
+    PyObject* py_val = PyLong_FromLong(value);
+    int ret = PyDict_SetItemString(dict, name, py_val);
+    Py_DECREF(py_val);
+    return ret;
+}
+
 static int handle_socket(ModuleState& state, pid_t pid, int fd, PyObject* out) 
 {
     socket_fdinfo si;
-    int size = proc_pidfdinfo(pid, fd, PROC_PIDFDSOCKETINFO, &si, sizeof(si));
+    const int size = proc_pidfdinfo(pid, fd, PROC_PIDFDSOCKETINFO, &si, sizeof(si));
     if (size <= 0) {
         PyErr_Format(PyExc_RuntimeError, 
                 "proc_pidfdinfo: PROC_PIDFDSOCKETINFO failed, errno %d", errno);
         return -1;
     }
 
-    int family = si.psi.soi_family;
+    PyObject* socket = PyDict_New();
+    if (socket == NULL) {
+        return -1;
+    }
+    const int family = si.psi.soi_family;
+
+    set_dict_val_steal_obj(socket, "family", get_address_family(state, family));
+    set_dict_val_steal_obj(socket, "soi_state", get_soi_flags_value(state, si.psi.soi_state));
+
+    set_dict_val(socket, "options", si.psi.soi_options & 0xffff); // FIXME: is mask needed?
+    set_dict_val(socket, "linger", si.psi.soi_linger& 0xffff); // FIXME: is mask needed?
+    set_dict_val(socket, "recv_queue_size", si.psi.soi_rcv.sbi_cc);
+    set_dict_val(socket, "send_queue_size", si.psi.soi_snd.sbi_cc);
+    set_dict_val(socket, "incqlen", si.psi.soi_incqlen);
+    set_dict_val(socket, "qlen", si.psi.soi_qlen);
+    set_dict_val(socket, "qlimit", si.psi.soi_qlimit);
+    set_dict_val(socket, "recv_mbmax", si.psi.soi_rcv.sbi_mbmax);
+    set_dict_val(socket, "send_mbmax", si.psi.soi_snd.sbi_mbmax);
 
     PyObject* details = NULL;
+    const char* keyname = NULL;
+
+    // address families for which we have specific handling
     switch (family) {
     case AF_INET:
     case AF_INET6:
         details = handle_inet_socket(state, si);
+        keyname = "inet_socket";
         break;
-    // case AF_UNIX:
-    //    break;
-    default:
-        PyErr_Format(PyExc_RuntimeError, 
-                "proc_pidfdinfo: handle_socket unhandled family %d", family);
-        return -1;
+    case AF_UNIX:
+        details = handle_unix_socket(state, si);
+        keyname = "unix_socket";
+        break;
     };
 
-    PyObject* soi_state = get_soi_flags_value(state, si.psi.soi_state);
-    PyDict_SetItemString(details, "soi_state", soi_state);
-
-    PyObject* py_family = get_address_family(state, family);
-    PyDict_SetItemString(out, "family", py_family);
-
-    if(details != NULL) {
-        PyDict_SetItemString(out, "socket", details);
-        return 0;
-    } else {
-        return -1;
+    if (keyname != NULL) {
+        // FIXME:If details == NULL, error occoured
+        set_dict_val_steal_obj(socket, keyname, details);
     }
+   
+    set_dict_val_steal_obj(out, "socket", socket);
+    return 0;
 }
 
 static int handle_vnode(ModuleState& state, pid_t pid, int fd, PyObject* out) 
 {
-    //switch ((int)(vip->vip_vi.vi_stat.vst_mode & S_IFMT)) {
     vnode_fdinfowithpath vi;
-
     size_t size = proc_pidfdinfo(pid, fd, PROC_PIDFDVNODEPATHINFO, &vi, sizeof(vi));
     if (size <= 0) {
         PyErr_Format(PyExc_RuntimeError, 
@@ -639,37 +689,19 @@ static int handle_vnode(ModuleState& state, pid_t pid, int fd, PyObject* out)
 
     // FIXME: is this the correct conversion for FS encoding?
     // fIXME: catch errors
-    PyObject* value = PyUnicode_FromString(vi.pvip.vip_path);
-    PyDict_SetItemString(details, "path", value);
-    PyDict_SetItemString(out, "vnode", details);
+    set_dict_val_steal_obj(details, "path", PyUnicode_FromString(vi.pvip.vip_path));
+    set_dict_val_steal_obj(details, "ifmt", get_ifmt(state, vi.pvip.vip_vi.vi_stat.vst_mode & S_IFMT));
+    set_dict_val_steal_obj(details, "open_mode", get_open_mode_flags_value(state, vi.pfi.fi_openflags));
+    set_dict_val(details, "inode", vi.pvip.vip_vi.vi_stat.vst_ino);
+    set_dict_val(details, "offset", vi.pfi.fi_offset);
+    set_dict_val(details, "status", vi.pfi.fi_status);
 
-    PyObject* ifmt = get_ifmt(state, vi.pvip.vip_vi.vi_stat.vst_mode & S_IFMT);
-    PyDict_SetItemString(details, "ifmt", ifmt);
-
-    PyObject* inode = PyLong_FromUInt64(vi.pvip.vip_vi.vi_stat.vst_ino);
-    PyDict_SetItemString(details, "inode", inode);
-
-    PyDict_SetItemString(details, "open_mode", get_open_mode_flags_value(state, vi.pfi.fi_openflags));
-
+    set_dict_val_steal_obj(out, "vnode", details);
 #if 0
-	uint32_t                fi_openflags;
-	uint32_t                fi_status;
-	off_t                   fi_offset;
+TODO:
+    device/rdev
 	int32_t                 fi_type;
 	uint32_t                fi_guardflags;
-
-    f = pfi->fi_openflags & (FREAD | FWRITE);
-    if (f == FREAD)
-        Lf->access = LSOF_FILE_ACCESS_READ;
-    else if (f == FWRITE)
-        Lf->access = LSOF_FILE_ACCESS_WRITE;
-     //.* Save the offset / size
-    Lf->off = (SZOFFTYPE)pfi->fi_offset;
-    Lf->off_def = 1;
-
-    // * Save file structure information as requested.
-    Lf->ffg = (long)pfi->fi_openflags;
-    Lf->fsv |= FSV_FG;
 #endif
     return 0;
 }
@@ -678,14 +710,14 @@ static int handle_pipe(ModuleState& state, pid_t pid, int fd, PyObject* out)
 {
     // struct pipe_fdinfo pi;
     // size_t size = proc_pidfdinfo(pid, fd, PROC_PIDFDPIPEINFO, &pi, sizeof(pi));
-    return -1;
+    return 0;
 }
 
 static int handle_kqueue(ModuleState& state, pid_t pid, int fd, PyObject* out) 
 {
     // struct kqueue_fdinfo kq;
     // size_t size  = proc_pidfdinfo(pid, fd, PROC_PIDFDKQUEUEINFO, &kq, sizeof(kq));
-    return -1;
+    return 0;
 }
 
 static PyObject* get_fd_info(PyObject* self, PyObject *args)  
