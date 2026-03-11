@@ -15,12 +15,14 @@ struct ModuleState {
     PyObject* ipv6_ctor;
 
     PyObject* fd_type_enums;
+    PyObject* soi_flags;
 
     int clear() {
         Py_XDECREF(ipv4_ctor);
         Py_XDECREF(ipv6_ctor);
 
         Py_XDECREF(fd_type_enums);
+        Py_XDECREF(soi_flags);
 
         return 0;
     }
@@ -30,6 +32,7 @@ struct ModuleState {
         Py_VISIT(ipv6_ctor);
 
         Py_VISIT(fd_type_enums);
+        Py_VISIT(soi_flags);
 
         return 0;
     }
@@ -46,7 +49,10 @@ ModuleState& get_module_state(PyObject* module)
     return *(ModuleState*)state;
 }
 
-static int add_enum_value(PyObject* attrs, const char* name, int value) {
+static int add_enum_value(PyObject* attrs, const char* name, int value, const char* docstring) {
+    assert(attrs != NULL);
+    assert(name != NULL);
+
     PyObject* py_key = PyUnicode_FromString(name);
     PyObject* py_val = PyLong_FromLong(value);
 
@@ -83,8 +89,8 @@ static PyObject* make_reverse_enum(PyObject* this_enum_type, PyObject* values, i
     return ret;
 }
 
-static PyObject* create_enum(PyObject* module, const char* enum_name, 
-        PyObject* values, int max_enum_value)
+static PyObject* create_enum_internal(PyObject* module, const char* py_typename, 
+        const char* enum_name, PyObject* values, int max_enum_value) 
 {
     PyObject* ret = NULL;
     PyObject* name = NULL, *args = NULL, *enum_mod = NULL;
@@ -92,30 +98,47 @@ static PyObject* create_enum(PyObject* module, const char* enum_name,
 
     name = PyUnicode_FromString(enum_name);
     args = PyTuple_Pack(2, name, values);
-    enum_mod = PyImport_ImportModule("enum");
 
-    if (name == NULL || args == NULL || enum_mod == NULL) {
+    if (name == NULL || args == NULL) {
+        PyErr_Format(PyExc_MemoryError, "create_enum_internal failed to alloc"); 
         goto out;
     }
 
-    enum_type = PyObject_GetAttrString(enum_mod, "Enum");
+    enum_mod = PyImport_ImportModule("enum");
+    if (enum_mod == NULL) {
+        PyErr_Format(PyExc_ValueError, "create_enum_internal couldn't get enum module ref"); 
+        goto out;
+    }
+
+    enum_type = PyObject_GetAttrString(enum_mod, py_typename);
     if (enum_type == NULL) {
+        PyErr_Format(PyExc_TypeError, 
+            "create_enum_internal couldn't find type '%s' in enum mod", py_typename); 
         goto out;
     }
     
     this_enum_type = PyObject_Call(enum_type, args, NULL);
     if (this_enum_type == NULL) {
+        // exception should already be raised..
         goto out;
     }
 
     // Ok, enum is built.. thwack it in the module.
     if (PyObject_SetAttr(module, name, this_enum_type) < 0) {
+        PyErr_Format(PyExc_RuntimeError, "failed to add object to module");
         goto out;
     }
 
-    // now we've created the "forward enum", create a reverse one 
+    // if reqested now we've created the "forward enum", create a reverse one 
     // i.e. mapping into to enum value
-    ret = make_reverse_enum(this_enum_type, values, max_enum_value);
+    if (max_enum_value >= 0) {
+        ret = make_reverse_enum(this_enum_type, values, max_enum_value);
+    } else {
+        // don't want a reverse lookup table, just return the original enum
+        ret = this_enum_type;
+        // caller now owns this - cancel out the XDECREF below
+        Py_INCREF(ret);
+    }
     
 out:
     Py_XDECREF(name);
@@ -126,8 +149,27 @@ out:
     return ret;
 }
 
+static PyObject* create_flags(PyObject* module, const char* enum_name, PyObject* values)
+{
+    return create_enum_internal(module, "Flag", enum_name, values, -1);
+}
+
+static PyObject* create_enum(PyObject* module, const char* enum_name, 
+        PyObject* values, int max_enum_value)
+{
+    return create_enum_internal(module, "Enum", enum_name, values, max_enum_value);
+}
+
 static PyObject* get_enum_value(PyObject* enum_list, int idx) {
     return PyList_GetItem(enum_list, idx);
+}
+
+static PyObject* get_flags_object(PyObject* flags_type, int flags) {
+    assert(flags_type != NULL);
+    PyObject* value = PyLong_FromLong(flags);
+    //FIXME: do we need a tuple here?
+    PyObject* args = PyTuple_Pack(1, value);
+    return PyObject_Call(flags_type, args, NULL);
 }
 
 static int build_enum_fd_type(PyObject* module) 
@@ -138,17 +180,17 @@ static int build_enum_fd_type(PyObject* module)
         return -1;
     }
 
-    add_enum_value(attrs, "ATALK", PROX_FDTYPE_ATALK);
-    add_enum_value(attrs, "VNODE", PROX_FDTYPE_VNODE);
-    add_enum_value(attrs, "SOCKET", PROX_FDTYPE_SOCKET);
-    add_enum_value(attrs, "PSHM", PROX_FDTYPE_PSHM);
-    add_enum_value(attrs, "PSEM", PROX_FDTYPE_PSEM);
-    add_enum_value(attrs, "KQUEUE", PROX_FDTYPE_KQUEUE);
-    add_enum_value(attrs, "PIPE", PROX_FDTYPE_PIPE);
-    add_enum_value(attrs, "FSEVENTS", PROX_FDTYPE_FSEVENTS);
-    add_enum_value(attrs, "NETPOLICY", PROX_FDTYPE_NETPOLICY);
-    add_enum_value(attrs, "CHANNEL", PROX_FDTYPE_CHANNEL);
-    add_enum_value(attrs, "NEXUS", PROX_FDTYPE_NEXUS);
+    add_enum_value(attrs, "ATALK", PROX_FDTYPE_ATALK, "");
+    add_enum_value(attrs, "VNODE", PROX_FDTYPE_VNODE, "");
+    add_enum_value(attrs, "SOCKET", PROX_FDTYPE_SOCKET, "");
+    add_enum_value(attrs, "PSHM", PROX_FDTYPE_PSHM, "");
+    add_enum_value(attrs, "PSEM", PROX_FDTYPE_PSEM, "");
+    add_enum_value(attrs, "KQUEUE", PROX_FDTYPE_KQUEUE, "");
+    add_enum_value(attrs, "PIPE", PROX_FDTYPE_PIPE, "");
+    add_enum_value(attrs, "FSEVENTS", PROX_FDTYPE_FSEVENTS, "");
+    add_enum_value(attrs, "NETPOLICY", PROX_FDTYPE_NETPOLICY, "");
+    add_enum_value(attrs, "CHANNEL", PROX_FDTYPE_CHANNEL, "");
+    add_enum_value(attrs, "NEXUS", PROX_FDTYPE_NEXUS, "");
 
     struct ModuleState& state = get_module_state(module);
 
@@ -159,13 +201,50 @@ static int build_enum_fd_type(PyObject* module)
     return reverse == NULL ? -1 : 0;
 };
 
+static int build_flags_soi(PyObject* module) 
+{
+    PyObject* attrs = PyDict_New();
+    if (attrs == NULL) {
+        PyErr_Format(PyExc_MemoryError, "failed to allocate for enum soi");
+        return -1;
+    }
+
+    add_enum_value(attrs, "NOFDREF", SOI_S_NOFDREF, "no file table ref any more");
+    add_enum_value(attrs, "ISCONNECTED", SOI_S_ISCONNECTED, "socket connected to a peer");
+    add_enum_value(attrs, "ISCONNECTING", SOI_S_ISCONNECTING, "in process of connecting to peer");
+    add_enum_value(attrs, "ISDISCONNECTED", SOI_S_ISDISCONNECTED, "in process of disconnecting");
+    add_enum_value(attrs, "CANTSENDMODE", SOI_S_CANTSENDMORE, "can't send more data to peer");
+    add_enum_value(attrs, "CANTREVCMODE", SOI_S_CANTRCVMORE, "can't receive more data from peer");
+    add_enum_value(attrs, "RCVATMARK", SOI_S_RCVATMARK, "at mark on input");
+    add_enum_value(attrs, "PRIV", SOI_S_PRIV, "privileged for broadcast, raw...");
+    add_enum_value(attrs, "NBIO", SOI_S_NBIO , "non-blocking ops");
+    add_enum_value(attrs, "ASYNC", SOI_S_ASYNC, "async i/o notify");
+    add_enum_value(attrs, "INCOMP", SOI_S_INCOMP, "Unaccepted, incomplete connection");
+    add_enum_value(attrs, "COMP", SOI_S_COMP, "unaccepted, complete connection");
+    add_enum_value(attrs, "ISDISCONNECTED", SOI_S_ISDISCONNECTED, "socket disconnected from peer");
+    add_enum_value(attrs, "DRAINING", SOI_S_DRAINING, "close waiting for blocked system calls to drain");
+
+    struct ModuleState& state = get_module_state(module);
+    state.soi_flags = create_flags(module, "SOI", attrs);
+
+    Py_DECREF(attrs);
+
+    return state.soi_flags == NULL ? -1 : 0;
+};
+
+
 static PyObject* get_fd_type(ModuleState& state, int fd_type) {
     return get_enum_value(state.fd_type_enums, fd_type);
 }
 
+static PyObject* get_soi_flags_value(ModuleState& state, int flags) {
+    return get_flags_object(state.soi_flags, flags);
+}
+
 static int build_enums(PyObject* module) 
 {
-    if (build_enum_fd_type(module) < 0) {
+    if (build_enum_fd_type(module) < 0 || 
+        build_flags_soi(module) < 0 ) {
         return -1;
     }
     return 0;
@@ -286,10 +365,10 @@ static int handle_socket(ModuleState& state, pid_t pid, int fd, PyObject* out)
         return -1;
     }
 
-    PyObject* st = PyLong_FromLong(si.psi.soi_state);
+    int family = si.psi.soi_family;
 
     PyObject* details = NULL;
-    switch ((si.psi.soi_family)) {
+    switch (family) {
     case AF_INET:
     case AF_INET6:
         details = handle_inet_socket(state, si);
@@ -298,11 +377,14 @@ static int handle_socket(ModuleState& state, pid_t pid, int fd, PyObject* out)
     //    break;
     default:
         PyErr_Format(PyExc_RuntimeError, 
-                "proc_pidfdinfo: handle_socket unhandled family %d", si.psi.soi_family);
+                "proc_pidfdinfo: handle_socket unhandled family %d", family);
         return -1;
     };
 
-    PyDict_SetItemString(details, "state", st);
+    // PyObject* socket_state = PyLong_FromLong(si.psi.soi_state);
+    PyObject* socket_state = get_soi_flags_value(state, si.psi.soi_state);
+
+    PyDict_SetItemString(details, "state", socket_state);
 
     if(details != NULL) {
         PyDict_SetItemString(out, "socket", details);
@@ -327,8 +409,16 @@ static int handle_vnode(ModuleState& state, pid_t pid, int fd, PyObject* out)
     } else if (size < sizeof(vi)) {
     }
 
+    PyObject* details = PyDict_New();
+    if (details == NULL) {
+        return -1;
+    }
+
+    // FIXME: is this the correct conversion for FS encoding?
+    // fIXME: catch errors
     PyObject* value = PyUnicode_FromString(vi.pvip.vip_path);
-    PyDict_SetItemString(out, "path", value);
+    PyDict_SetItemString(details, "path", value);
+    PyDict_SetItemString(out, "vnode", details);
     return 0;
 }
 
