@@ -730,13 +730,13 @@ static int handle_vnode_stat(ModuleState& state, const char* key, vinfo_stat vi_
         handle_dev(stat, "rdev", vi_stat.vst_rdev);
     }
 
-	//uint16_t        vst_nlink;      /* [XSI] Number of hard links */
+	// uint16_t        vst_nlink;      /* [XSI] Number of hard links */
     set_dict_val_unsigned(stat, "nlink", vi_stat.vst_nlink);
 
-	//uid_t           vst_uid;        /* [XSI] User ID of the file */
+	// uid_t           vst_uid;        /* [XSI] User ID of the file */
     set_dict_val_unsigned(stat, "uid", vi_stat.vst_uid);
 
-	//gid_t           vst_gid;        /* [XSI] Group ID of the file */
+	// gid_t           vst_gid;        /* [XSI] Group ID of the file */
     set_dict_val_unsigned(stat, "gid", vi_stat.vst_gid);
 
     set_dict_time(stat, "atime", vi_stat.vst_atime, vi_stat.vst_atimensec);
@@ -744,19 +744,24 @@ static int handle_vnode_stat(ModuleState& state, const char* key, vinfo_stat vi_
     set_dict_time(stat, "ctime", vi_stat.vst_ctime, vi_stat.vst_ctimensec);
     set_dict_time(stat, "birthtime", vi_stat.vst_birthtime, vi_stat.vst_birthtimensec);
     
-	//off_t           vst_size;       /* [XSI] file size, in bytes */
+	// off_t           vst_size;       /* [XSI] file size, in bytes */
     set_dict_val_signed(stat, "size", vi_stat.vst_size);
 
-#if 0
-	int64_t         vst_blocks;     /* [XSI] blocks allocated for file */
-	int32_t         vst_blksize;    /* [XSI] optimal blocksize for I/O */
-	uint32_t        vst_flags;      /* user defined flags for file */
-	uint32_t        vst_gen;        /* file generation number */
+	// int64_t         vst_blocks;     /* [XSI] blocks allocated for file */
+    set_dict_val_signed(stat, "blocks", vi_stat.vst_uid);
 
-#endif
+	// int32_t         vst_blksize;    /* [XSI] optimal blocksize for I/O */
+    set_dict_val_signed(stat, "blksize", vi_stat.vst_blksize);
+
+	// uint32_t        vst_flags;      /* user defined flags for file */
+    set_dict_val_unsigned(stat, "flags", vi_stat.vst_flags);
+
+	// uint32_t        vst_gen;        /* file generation number */
+    set_dict_val_unsigned(stat, "gen", vi_stat.vst_gen);
+
     return set_dict_val_steal_obj(out, key, stat);
-
 }
+
 static int handle_sockbuf_info(ModuleState& state, const char* key, const sockbuf_info& info, 
         PyObject* out) 
 {
