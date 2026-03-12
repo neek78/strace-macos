@@ -73,36 +73,44 @@ ModuleState& get_module_state(PyObject* module)
 }
 
 
-static int set_dict_val_signed(PyObject* dict, const char* name, int64_t value) {
+static int set_dict_val_signed(PyObject* dict, const char* key, int64_t value) {
     PyObject* py_val = PyLong_FromLongLong(value);
-    int ret = PyDict_SetItemString(dict, name, py_val);
+    int ret = PyDict_SetItemString(dict, key, py_val);
     Py_DECREF(py_val);
     return ret;
 }
 
-static int set_dict_val_unsigned(PyObject* dict, const char* name, uint64_t value) {
+static int set_dict_val_unsigned(PyObject* dict, const char* key, uint64_t value) {
     PyObject* py_val = PyLong_FromUnsignedLongLong(value);
-    int ret = PyDict_SetItemString(dict, name, py_val);
+    int ret = PyDict_SetItemString(dict, key, py_val);
     Py_DECREF(py_val);
     return ret;
 }
 
-static int set_dict_time(PyObject* dict, const char* name, int64_t sec, int64_t nsec) {
+static int set_dict_time(PyObject* dict, const char* key, int64_t sec, int64_t nsec) {
+    // FIXME: implement. Convert into some python friendly timeval type
     return 0;
 }
 
-// steal the object value, and put it in the dict. Handles NULL for value
-static int set_dict_val_steal_obj(PyObject* dict, const char* name, PyObject* value) {
+// put obj in the dict without touching refcnt. Handles NULL for value
+static int set_dict_val_obj(PyObject* dict, const char* key, PyObject* value) {
     assert(dict != NULL);
-    assert(name != NULL);
+    assert(key!= NULL);
     if (value == NULL) {
         return -1;
     }
 
-    int ret = PyDict_SetItemString(dict, name, value);
+    int ret = PyDict_SetItemString(dict, key, value);
+    return ret;
+}
+
+// steal the object value, and put it in the dict. Handles NULL for value
+static int set_dict_val_steal_obj(PyObject* dict, const char* key, PyObject* value) {
+    int ret = set_dict_val_obj(dict, key, value);
     Py_DECREF(value);
     return ret;
 }
+
 static int add_enum_value(PyObject* attrs, const char* name, int value, const char* docstring) {
     assert(attrs != NULL);
     assert(name != NULL);
@@ -363,6 +371,7 @@ static int build_address_family(PyObject* module)
     add_enum_value(attrs, "IEEE80211", AF_IEEE80211,"IEEE 802.11 protocol");
     add_enum_value(attrs, "UTUN", AF_UTUN,"");
     add_enum_value(attrs, "SOCKTES", AF_VSOCK,"Sockets");
+
     struct ModuleState& state = get_module_state(module);
 
     state.address_family_enums = create_enum(module, "AddressFamily", attrs);
@@ -483,7 +492,6 @@ static int build_flags_open_mode(PyObject* module)
     return state.open_mode_flags == NULL ? -1 : 0;
 };
 
-
 static PyObject* get_fd_type(ModuleState& state, int fd_type) {
     return get_enum_value(state.fd_type_enums, fd_type);
 }
@@ -532,7 +540,15 @@ static int build_enums(PyObject* module)
     return 0;
 }
 
-PyObject* extract_ipv4_address(ModuleState& state, const in4in6_addr& addr)
+bool inet_is_ipv4(const socket_info& si) 
+{
+    const int family = si.soi_family;
+    assert(family == AF_INET || family == AF_INET6);
+    return family == AF_INET;
+}
+
+// extract ipv4 address
+PyObject* extract_address(ModuleState& state, const in4in6_addr& addr)
 {
     assert(state.ipv4_ctor);
 
@@ -548,7 +564,8 @@ PyObject* extract_ipv4_address(ModuleState& state, const in4in6_addr& addr)
     return py_addr;
 }
 
-PyObject* extract_ipv6_address(ModuleState& state, const in6_addr& addr)
+// extract ipv6 address
+PyObject* extract_address(ModuleState& state, const in6_addr& addr)
 {
     assert(state.ipv6_ctor);
 
@@ -568,14 +585,13 @@ template<typename T>
 PyObject* extract_address(ModuleState& state, const T& addr, bool is_ipv4)
 {
     return is_ipv4 ? 
-        extract_ipv4_address(state, addr.ina_46) :
-        extract_ipv6_address(state, addr.ina_6);
+        extract_address(state, addr.ina_46) :
+        extract_address(state, addr.ina_6);
 }
 
 int handle_tcp_socket(ModuleState& state, const socket_info& si, PyObject* out) 
 {
-    const int family = si.soi_family;
-    const bool is_ipv4 = family == AF_INET;
+    const bool is_ipv4 = inet_is_ipv4(si);
 
     //FIXME: leaks
     PyDict_SetItemString(out, "kind", PyUnicode_FromString("tcp"));
@@ -589,22 +605,17 @@ int handle_tcp_socket(ModuleState& state, const socket_info& si, PyObject* out)
     Py_CLEAR(local_addr);
     Py_CLEAR(remote_addr);
 
-    long local_port = ntohs(si.soi_proto.pri_tcp.tcpsi_ini.insi_lport);
-    long remote_port = ntohs(si.soi_proto.pri_tcp.tcpsi_ini.insi_fport);
+    set_dict_val_signed(out, "local_port", ntohs(si.soi_proto.pri_tcp.tcpsi_ini.insi_lport));
+    set_dict_val_signed(out, "remote_port", ntohs(si.soi_proto.pri_tcp.tcpsi_ini.insi_fport));
 
-    //FIXME: leaks
-    PyDict_SetItemString(out, "local_port", PyLong_FromLong(local_port));
-    PyDict_SetItemString(out, "remote_port", PyLong_FromLong(remote_port));
-
-    long tcp_state = si.soi_proto.pri_tcp.tcpsi_state;
-    PyDict_SetItemString(out, "tcp_state", get_tcp_state(state, tcp_state));
+    const long tcp_state = si.soi_proto.pri_tcp.tcpsi_state;
+    set_dict_val_obj(out, "tcp_state", get_tcp_state(state, tcp_state));
     return 0;
 }
 
 int handle_in_socket(ModuleState& state, const socket_info& si, PyObject* out) 
 {
-    const int family = si.soi_family;
-    const bool is_ipv4 = family == AF_INET;
+    const bool is_ipv4 = inet_is_ipv4(si);
 
     PyObject* local_addr = extract_address(state, si.soi_proto.pri_in.insi_laddr, is_ipv4);
     PyObject* remote_addr = extract_address(state, si.soi_proto.pri_in.insi_faddr, is_ipv4);
@@ -612,11 +623,9 @@ int handle_in_socket(ModuleState& state, const socket_info& si, PyObject* out)
     PyDict_SetItemString(out, "local_addr", local_addr);
     PyDict_SetItemString(out, "remote_addr", remote_addr);
 
-    long local_port = ntohs(si.soi_proto.pri_in.insi_lport);
-    long remote_port = ntohs(si.soi_proto.pri_in.insi_fport);
+    set_dict_val_signed(out, "local_port", ntohs(si.soi_proto.pri_in.insi_lport));
+    set_dict_val_signed(out, "remote_port", ntohs(si.soi_proto.pri_in.insi_fport));
 
-    PyDict_SetItemString(out, "local_port", PyLong_FromLong(local_port));
-    PyDict_SetItemString(out, "remote_port", PyLong_FromLong(remote_port));
     return 0;
 }
 
@@ -661,7 +670,6 @@ PyObject* handle_inet_socket(ModuleState& state, const socket_fdinfo& si)
             Py_DECREF(out);
             return NULL;
     };
-
     return out;
 }
 
@@ -675,21 +683,22 @@ PyObject* handle_unix_socket(ModuleState& state, const socket_fdinfo& si)
 
     // extract the socket's path(s)... 
     // lsof does some pretty whack things here.. we'll just take the simple route
-    PyObject* path = PyUnicode_FromString(si.psi.soi_proto.pri_un.unsi_addr.ua_sun.sun_path);
-    PyDict_SetItemString(out, "path", path);
+    set_dict_val_steal_obj(out, "path", 
+        PyUnicode_FromString(si.psi.soi_proto.pri_un.unsi_addr.ua_sun.sun_path));
 
-    PyObject* cpath = PyUnicode_FromString(si.psi.soi_proto.pri_un.unsi_caddr.ua_sun.sun_path);
-    PyDict_SetItemString(out, "cpath", cpath);
+    set_dict_val_steal_obj(out, "cpath", 
+        PyUnicode_FromString(si.psi.soi_proto.pri_un.unsi_caddr.ua_sun.sun_path));
+
     return out;
 }
 
 static int handle_si_common(ModuleState& state, const proc_fileinfo& pfi, PyObject* out)
 {
     // handle data common to all fd types..
-    set_dict_val_steal_obj(out, "open_flags", get_open_mode_flags_value(state, pfi.fi_openflags));
+    set_dict_val_obj(out, "open_flags", get_open_mode_flags_value(state, pfi.fi_openflags));
     set_dict_val_signed(out, "offset", pfi.fi_offset);
-    set_dict_val_steal_obj(out, "status",get_proc_fp_flags_value(state, pfi.fi_status));
-    set_dict_val_steal_obj(out, "guard_flags",get_proc_fi_guard_flags_value(state, pfi.fi_guardflags));
+    set_dict_val_obj(out, "status", get_proc_fp_flags_value(state, pfi.fi_status));
+    set_dict_val_obj(out, "guard_flags", get_proc_fi_guard_flags_value(state, pfi.fi_guardflags));
     return 0;
 }
 
@@ -717,7 +726,7 @@ static int handle_vnode_stat(ModuleState& state, const char* key, vinfo_stat vi_
 
 	// uint16_t        vst_mode;       /* [XSI] Mode of file (see below) */
     const uint16_t ifmt = vi_stat.vst_mode & S_IFMT;
-    set_dict_val_steal_obj(stat, "mode", get_ifmt(state, ifmt));
+    set_dict_val_obj(stat, "mode", get_ifmt(state, ifmt));
 
     // def not defined for FIFO
     if (ifmt != S_IFIFO) {
@@ -803,7 +812,7 @@ static int handle_socket(ModuleState& state, pid_t pid, int fd, PyObject* out)
 
     const int family = si.psi.soi_family;
 
-    set_dict_val_steal_obj(socket, "family", get_address_family(state, family));
+    set_dict_val_obj(socket, "family", get_address_family(state, family));
 
     // there is a stat field here, but not sure when it makes sense to include it...
     // handle_vnode_stat(state, "stat", si.psi.soi_stat, socket);
@@ -816,7 +825,7 @@ static int handle_socket(ModuleState& state, pid_t pid, int fd, PyObject* out)
     // FIXME: options.. a flag?
     set_dict_val_signed(socket, "options", si.psi.soi_options);
     set_dict_val_signed(socket, "linger", si.psi.soi_linger); 
-    set_dict_val_steal_obj(socket, "state", get_soi_flags_value(state, si.psi.soi_state));
+    set_dict_val_obj(socket, "state", get_soi_flags_value(state, si.psi.soi_state));
     set_dict_val_signed(socket, "qlen", si.psi.soi_qlen);
     set_dict_val_signed(socket, "incqlen", si.psi.soi_incqlen);
     set_dict_val_signed(socket, "qlimit", si.psi.soi_qlimit);
