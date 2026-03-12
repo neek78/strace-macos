@@ -453,6 +453,7 @@ static int build_flags_soi(PyObject* module)
 };
 
 
+
 static int build_flags_open_mode(PyObject* module) 
 {
     PyObject* attrs = PyDict_New();
@@ -476,13 +477,24 @@ static int build_flags_open_mode(PyObject* module)
     add_enum_value(attrs, "O_RESOLVE_BENEATH", O_RESOLVE_BENEATH, "only for open(2), same value as FMARK");
     add_enum_value(attrs, "O_UNIQUE", O_UNIQUE, "only for open(2), same value as FDEFER");
     add_enum_value(attrs, "O_EVTONLY", O_EVTONLY, "descriptor requested for event notifications only");
-    add_enum_value(attrs, "BOGUS", 0x10000, "bogus");
+
     add_enum_value(attrs, "O_NOCTTY", O_NOCTTY, "don't assign controlling terminal");
     add_enum_value(attrs, "O_DIRECTORY", O_DIRECTORY, "");;
     add_enum_value(attrs, "O_DSYNC", O_DSYNC, "synch I/O data integrity");;
     add_enum_value(attrs, "O_CLOEXEC", O_CLOEXEC, "implicitly set FD_CLOEXEC");
     add_enum_value(attrs, "O_NOFOLLOW_ANY", O_NOFOLLOW_ANY, "no symlinks allowed in path");
     add_enum_value(attrs, "O_EXEC", O_EXEC, "open file for execute only");
+
+    // these values are defined in fcntl.h but guarded by #ifdef KERNEL
+    // however we see these flags via libproc...
+    add_enum_value(attrs, "FWASWRITTEN", 0x10000, "descriptor was written");
+    add_enum_value(attrs, "FNOCACHE", 0x00040000, "fcntl(F_NOCACHE, 1)");
+    add_enum_value(attrs, "FNORDAHEAD", 0x00080000, "fcntl(F_RDAHEAD, 0)");
+    add_enum_value(attrs, "FNODIRECT", 0x00800000, "fcntl(F_NODIRECT, 1)");
+    add_enum_value(attrs, "FENCRYPTED", 0x02000000, "");
+    add_enum_value(attrs, "FSINGLE_WRITER", 0x04000000, "fcntl(F_SINGLE_WRITER, 1)");
+    add_enum_value(attrs, "O_CLOFORK", 0x08000000, "implicitly set FD_CLOFORK");
+    add_enum_value(attrs, "FUNENCRYPTED", 0x10000000, "");;
 
     struct ModuleState& state = get_module_state(module);
     state.open_mode_flags = create_flags(module, "OpenMode", attrs);
@@ -721,32 +733,23 @@ static int handle_vnode_stat(ModuleState& state, const char* key, vinfo_stat vi_
         return -1;
     }
 
-	// uint64_t        vst_ino;        /* [XSI] File serial number */
     set_dict_val_unsigned(stat, "inode", vi_stat.vst_ino);
 
-	// uint16_t        vst_mode;       /* [XSI] Mode of file (see below) */
     const uint16_t ifmt = vi_stat.vst_mode & S_IFMT;
     set_dict_val_obj(stat, "mode", get_ifmt(state, ifmt));
 
     // def not defined for FIFO
     if (ifmt != S_IFIFO) {
-        // uint32_t        vst_dev;        /* [XSI] ID of device containing file */
         handle_dev(stat, "dev", vi_stat.vst_dev);
     }
 
     // rdev only defined for BLK/CHR
     if (ifmt == S_IFBLK || ifmt == S_IFCHR) {
-	    // uint32_t        vst_rdev;       /* [XSI] Device ID */
         handle_dev(stat, "rdev", vi_stat.vst_rdev);
     }
 
-	// uint16_t        vst_nlink;      /* [XSI] Number of hard links */
     set_dict_val_unsigned(stat, "nlink", vi_stat.vst_nlink);
-
-	// uid_t           vst_uid;        /* [XSI] User ID of the file */
     set_dict_val_unsigned(stat, "uid", vi_stat.vst_uid);
-
-	// gid_t           vst_gid;        /* [XSI] Group ID of the file */
     set_dict_val_unsigned(stat, "gid", vi_stat.vst_gid);
 
     set_dict_time(stat, "atime", vi_stat.vst_atime, vi_stat.vst_atimensec);
@@ -754,19 +757,10 @@ static int handle_vnode_stat(ModuleState& state, const char* key, vinfo_stat vi_
     set_dict_time(stat, "ctime", vi_stat.vst_ctime, vi_stat.vst_ctimensec);
     set_dict_time(stat, "birthtime", vi_stat.vst_birthtime, vi_stat.vst_birthtimensec);
     
-	// off_t           vst_size;       /* [XSI] file size, in bytes */
     set_dict_val_signed(stat, "size", vi_stat.vst_size);
-
-	// int64_t         vst_blocks;     /* [XSI] blocks allocated for file */
     set_dict_val_signed(stat, "blocks", vi_stat.vst_uid);
-
-	// int32_t         vst_blksize;    /* [XSI] optimal blocksize for I/O */
     set_dict_val_signed(stat, "blksize", vi_stat.vst_blksize);
-
-	// uint32_t        vst_flags;      /* user defined flags for file */
     set_dict_val_unsigned(stat, "flags", vi_stat.vst_flags);
-
-	// uint32_t        vst_gen;        /* file generation number */
     set_dict_val_unsigned(stat, "gen", vi_stat.vst_gen);
 
     return set_dict_val_steal_obj(out, key, stat);
@@ -915,9 +909,22 @@ static int handle_pipe(ModuleState& state, pid_t pid, int fd, PyObject* out)
 {
     struct pipe_fdinfo pi;
     size_t size = proc_pidfdinfo(pid, fd, PROC_PIDFDPIPEINFO, &pi, sizeof(pi));
-    // FIXME: catch error
+    if (size <= 0) {
+        PyErr_Format(PyExc_RuntimeError, 
+            "proc_pidfdinfo PROC_PIDFDKQUEUEINFO: failed, errno %d", errno);
+        return -1;
+    } else if (size < sizeof(pi)) {
+        PyErr_Format(PyExc_RuntimeError, 
+            "proc_pidfdinfo PROC_PIDFDKQUEUEINFO: return value wrong size (%d)", size);
+        return -1;
+    }
+
+    // FIXME: catch errors
     handle_si_common(state, pi.pfi, out);
-    (void)size;
+    handle_vnode_stat(state, "stat", pi.pipeinfo.pipe_stat, out);
+    set_dict_val_unsigned(out, "handle", pi.pipeinfo.pipe_handle);
+    set_dict_val_unsigned(out, "peerhandle", pi.pipeinfo.pipe_peerhandle);
+    set_dict_val_signed(out, "status", pi.pipeinfo.pipe_status);
     return 0;
 }
 
@@ -925,9 +932,19 @@ static int handle_kqueue(ModuleState& state, pid_t pid, int fd, PyObject* out)
 {
     struct kqueue_fdinfo kqi;
     size_t size  = proc_pidfdinfo(pid, fd, PROC_PIDFDKQUEUEINFO, &kqi, sizeof(kqi));
+    if (size <= 0) {
+        PyErr_Format(PyExc_RuntimeError, 
+            "proc_pidfdinfo PROC_PIDFDKQUEUEINFO: failed, errno %d", errno);
+        return -1;
+    } else if (size < sizeof(kqi)) {
+        PyErr_Format(PyExc_RuntimeError, 
+            "proc_pidfdinfo PROC_PIDFDKQUEUEINFO: return value wrong size (%d)", size);
+        return -1;
+    }
+
     // FIXME: catch error
     handle_si_common(state, kqi.pfi, out);
-    (void)size;
+    handle_vnode_stat(state, "stat", kqi.kqueueinfo.kq_stat, out);
     return 0;
 }
 
