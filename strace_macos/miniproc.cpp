@@ -22,6 +22,8 @@ struct ModuleState {
 
     PyObject* soi_flags;
     PyObject* open_mode_flags;
+    PyObject* proc_fp_flags;
+    PyObject* proc_fi_guard_flags;
 
     int clear() {
         Py_XDECREF(ipv4_ctor);
@@ -31,8 +33,11 @@ struct ModuleState {
         Py_XDECREF(ifmt_enums);
         Py_XDECREF(address_family_enums);
         Py_XDECREF(tcp_state_enums);
+
         Py_XDECREF(soi_flags);
         Py_XDECREF(open_mode_flags);
+        Py_XDECREF(proc_fp_flags);
+        Py_XDECREF(proc_fi_guard_flags);
 
         return 0;
     }
@@ -45,8 +50,11 @@ struct ModuleState {
         Py_VISIT(ifmt_enums);
         Py_VISIT(address_family_enums);
         Py_VISIT(tcp_state_enums);
+
         Py_VISIT(soi_flags);
         Py_VISIT(open_mode_flags);
+        Py_VISIT(proc_fp_flags);
+        Py_VISIT(proc_fi_guard_flags);
 
         return 0;
     }
@@ -64,6 +72,37 @@ ModuleState& get_module_state(PyObject* module)
     return *(ModuleState*)state;
 }
 
+
+static int set_dict_val_signed(PyObject* dict, const char* name, int64_t value) {
+    PyObject* py_val = PyLong_FromLongLong(value);
+    int ret = PyDict_SetItemString(dict, name, py_val);
+    Py_DECREF(py_val);
+    return ret;
+}
+
+static int set_dict_val_unsigned(PyObject* dict, const char* name, uint64_t value) {
+    PyObject* py_val = PyLong_FromUnsignedLongLong(value);
+    int ret = PyDict_SetItemString(dict, name, py_val);
+    Py_DECREF(py_val);
+    return ret;
+}
+
+static int set_dict_time(PyObject* dict, const char* name, int64_t sec, int64_t nsec) {
+    return 0;
+}
+
+// steal the object value, and put it in the dict. Handles NULL for value
+static int set_dict_val_steal_obj(PyObject* dict, const char* name, PyObject* value) {
+    assert(dict != NULL);
+    assert(name != NULL);
+    if (value == NULL) {
+        return -1;
+    }
+
+    int ret = PyDict_SetItemString(dict, name, value);
+    Py_DECREF(value);
+    return ret;
+}
 static int add_enum_value(PyObject* attrs, const char* name, int value, const char* docstring) {
     assert(attrs != NULL);
     assert(name != NULL);
@@ -252,11 +291,10 @@ static int build_enum_fd_type(PyObject* module)
 
     struct ModuleState& state = get_module_state(module);
 
-    PyObject* reverse = create_enum(module, "FDType", attrs);
-    state.fd_type_enums = reverse;
+    state.fd_type_enums = create_enum(module, "FDType", attrs);
 
     Py_DECREF(attrs);
-    return reverse == NULL ? -1 : 0;
+    return state.fd_type_enums == NULL ? -1 : 0;
 };
 
 static int build_enum_ifmt(PyObject* module) 
@@ -332,6 +370,47 @@ static int build_address_family(PyObject* module)
     Py_DECREF(attrs);
     return state.address_family_enums == NULL ? -1 : 0;
 }
+
+static int build_flags_proc_fp(PyObject* module) 
+{
+    PyObject* attrs = PyDict_New();
+    if (attrs == NULL) {
+        PyErr_Format(PyExc_MemoryError, "failed to allocate for flags fp");
+        return -1;
+    }
+    add_enum_value(attrs, "SHARED", PROC_FP_SHARED, "shared by more than one fd");
+    add_enum_value(attrs, "CLEXEC", PROC_FP_CLEXEC, "close on exec");
+    add_enum_value(attrs, "GUARDED", PROC_FP_GUARDED, "guarded fd");
+    add_enum_value(attrs, "CLFORK", PROC_FP_CLFORK, "close on fork");
+
+    struct ModuleState& state = get_module_state(module);
+    state.proc_fp_flags = create_flags(module, "ProcFP", attrs);
+
+    Py_DECREF(attrs);
+
+    return state.proc_fp_flags == NULL ? -1 : 0;
+};
+
+static int build_flags_proc_fi_guard(PyObject* module) 
+{
+    PyObject* attrs = PyDict_New();
+    if (attrs == NULL) {
+        PyErr_Format(PyExc_MemoryError, "failed to allocate for flags fp");
+        return -1;
+    }
+
+    add_enum_value(attrs, "CLOSE", PROC_FI_GUARD_CLOSE, "");
+    add_enum_value(attrs, "DUP", PROC_FI_GUARD_DUP, "");
+    add_enum_value(attrs, "SOCKET_IPC", PROC_FI_GUARD_SOCKET_IPC, "");
+    add_enum_value(attrs, "FILEPORT", PROC_FI_GUARD_FILEPORT, "");
+
+    struct ModuleState& state = get_module_state(module);
+    state.proc_fi_guard_flags = create_flags(module, "ProcFIGuard", attrs);
+
+    Py_DECREF(attrs);
+
+    return state.proc_fi_guard_flags == NULL ? -1 : 0;
+};
 
 static int build_flags_soi(PyObject* module) 
 {
@@ -429,6 +508,14 @@ static PyObject* get_open_mode_flags_value(ModuleState& state, int flags) {
     return get_flags_object(state.open_mode_flags, flags);
 }
 
+static PyObject* get_proc_fp_flags_value(ModuleState& state, int flags) {
+    return get_flags_object(state.proc_fp_flags, flags);
+}
+
+static PyObject* get_proc_fi_guard_flags_value(ModuleState& state, int flags) {
+    return get_flags_object(state.proc_fi_guard_flags, flags);
+}
+
 static int build_enums(PyObject* module) 
 {
     if (build_enum_fd_type(module) < 0 || 
@@ -436,7 +523,10 @@ static int build_enums(PyObject* module)
         build_address_family(module) < 0 || 
         build_enum_tcp_state(module) < 0 || 
         build_flags_open_mode(module) < 0 || 
-        build_flags_soi(module) < 0 ) {
+        build_flags_soi(module) < 0 ||
+        build_flags_proc_fi_guard(module) < 0 ||
+        build_flags_proc_fp(module) < 0) {
+
         return -1;
     }
     return 0;
@@ -583,8 +673,8 @@ PyObject* handle_unix_socket(ModuleState& state, const socket_fdinfo& si)
         return NULL;
     }
 
-    // extract the socket's path(s)... lsof does some pretty whack things here.. we'll just take
-    // the simple route
+    // extract the socket's path(s)... 
+    // lsof does some pretty whack things here.. we'll just take the simple route
     PyObject* path = PyUnicode_FromString(si.psi.soi_proto.pri_un.unsi_addr.ua_sun.sun_path);
     PyDict_SetItemString(out, "path", path);
 
@@ -593,25 +683,98 @@ PyObject* handle_unix_socket(ModuleState& state, const socket_fdinfo& si)
     return out;
 }
 
+static int handle_si_common(ModuleState& state, const proc_fileinfo& pfi, PyObject* out)
+{
+    // handle data common to all fd types..
+    set_dict_val_steal_obj(out, "open_flags", get_open_mode_flags_value(state, pfi.fi_openflags));
+    set_dict_val_signed(out, "offset", pfi.fi_offset);
+    set_dict_val_steal_obj(out, "status",get_proc_fp_flags_value(state, pfi.fi_status));
+    set_dict_val_steal_obj(out, "guard_flags",get_proc_fi_guard_flags_value(state, pfi.fi_guardflags));
+    return 0;
+}
 
-// steal the object value, and put it in the dict. Handles NULL for value
-static int set_dict_val_steal_obj(PyObject* dict, const char* name, PyObject* value) {
-    assert(dict != NULL);
-    assert(name != NULL);
-    if (value == NULL) {
+static int handle_dev(PyObject* out, const char* name, int32_t val) 
+{
+    PyObject* dev = Py_BuildValue("(ii)", major(val), minor(val));
+    if (dev == NULL) {
+        return -1;
+    }
+    return set_dict_val_steal_obj(out, name, dev);
+}
+
+// extract details from vinfo_stat
+static int handle_vnode_stat(ModuleState& state, const char* key, vinfo_stat vi_stat, PyObject* out) 
+{
+    assert(socket != NULL);
+    PyObject* stat = PyDict_New();
+    if (stat == NULL) {
         return -1;
     }
 
-    int ret = PyDict_SetItemString(dict, name, value);
-    Py_DECREF(value);
-    return ret;
-}
+	// uint64_t        vst_ino;        /* [XSI] File serial number */
+    set_dict_val_unsigned(stat, "inode", vi_stat.vst_ino);
 
-static int set_dict_val(PyObject* dict, const char* name, unsigned long value) {
-    PyObject* py_val = PyLong_FromLong(value);
-    int ret = PyDict_SetItemString(dict, name, py_val);
-    Py_DECREF(py_val);
-    return ret;
+	// uint16_t        vst_mode;       /* [XSI] Mode of file (see below) */
+    const uint16_t ifmt = vi_stat.vst_mode & S_IFMT;
+    set_dict_val_steal_obj(stat, "mode", get_ifmt(state, ifmt));
+
+    // def not defined for FIFO
+    if (ifmt != S_IFIFO) {
+        // uint32_t        vst_dev;        /* [XSI] ID of device containing file */
+        handle_dev(stat, "dev", vi_stat.vst_dev);
+    }
+
+    // rdev only defined for BLK/CHR
+    if (ifmt == S_IFBLK || ifmt == S_IFCHR) {
+	    // uint32_t        vst_rdev;       /* [XSI] Device ID */
+        handle_dev(stat, "rdev", vi_stat.vst_rdev);
+    }
+
+	//uint16_t        vst_nlink;      /* [XSI] Number of hard links */
+    set_dict_val_unsigned(stat, "nlink", vi_stat.vst_nlink);
+
+	//uid_t           vst_uid;        /* [XSI] User ID of the file */
+    set_dict_val_unsigned(stat, "uid", vi_stat.vst_uid);
+
+	//gid_t           vst_gid;        /* [XSI] Group ID of the file */
+    set_dict_val_unsigned(stat, "gid", vi_stat.vst_gid);
+
+    set_dict_time(stat, "atime", vi_stat.vst_atime, vi_stat.vst_atimensec);
+    set_dict_time(stat, "mtime", vi_stat.vst_mtime, vi_stat.vst_mtimensec);
+    set_dict_time(stat, "ctime", vi_stat.vst_ctime, vi_stat.vst_ctimensec);
+    set_dict_time(stat, "birthtime", vi_stat.vst_birthtime, vi_stat.vst_birthtimensec);
+    
+	//off_t           vst_size;       /* [XSI] file size, in bytes */
+    set_dict_val_signed(stat, "size", vi_stat.vst_size);
+
+#if 0
+	int64_t         vst_blocks;     /* [XSI] blocks allocated for file */
+	int32_t         vst_blksize;    /* [XSI] optimal blocksize for I/O */
+	uint32_t        vst_flags;      /* user defined flags for file */
+	uint32_t        vst_gen;        /* file generation number */
+
+#endif
+    return set_dict_val_steal_obj(out, key, stat);
+
+}
+static int handle_sockbuf_info(ModuleState& state, const char* key, const sockbuf_info& info, 
+        PyObject* out) 
+{
+    assert(socket != NULL);
+    PyObject* buff_info = PyDict_New();
+    if (buff_info== NULL) {
+        return -1;
+    }
+
+    set_dict_val_unsigned(buff_info, "cc", info.sbi_cc);
+    set_dict_val_unsigned(buff_info, "hiwat", info.sbi_hiwat);
+    set_dict_val_unsigned(buff_info, "mbcnt", info.sbi_mbcnt);
+    set_dict_val_unsigned(buff_info, "mbmax", info.sbi_mbmax);
+    set_dict_val_unsigned(buff_info, "lowat", info.sbi_lowat);
+    set_dict_val_signed(buff_info, "flags", info.sbi_flags);
+    set_dict_val_signed(buff_info, "timeo", info.sbi_timeo);
+
+    return set_dict_val_steal_obj(out, key, buff_info);
 }
 
 static int handle_socket(ModuleState& state, pid_t pid, int fd, PyObject* out) 
@@ -628,20 +791,35 @@ static int handle_socket(ModuleState& state, pid_t pid, int fd, PyObject* out)
     if (socket == NULL) {
         return -1;
     }
+
+    // FIXME: catch error
+    handle_si_common(state, si.pfi, out);
+
     const int family = si.psi.soi_family;
 
     set_dict_val_steal_obj(socket, "family", get_address_family(state, family));
-    set_dict_val_steal_obj(socket, "soi_state", get_soi_flags_value(state, si.psi.soi_state));
 
-    set_dict_val(socket, "options", si.psi.soi_options & 0xffff); // FIXME: is mask needed?
-    set_dict_val(socket, "linger", si.psi.soi_linger& 0xffff); // FIXME: is mask needed?
-    set_dict_val(socket, "recv_queue_size", si.psi.soi_rcv.sbi_cc);
-    set_dict_val(socket, "send_queue_size", si.psi.soi_snd.sbi_cc);
-    set_dict_val(socket, "incqlen", si.psi.soi_incqlen);
-    set_dict_val(socket, "qlen", si.psi.soi_qlen);
-    set_dict_val(socket, "qlimit", si.psi.soi_qlimit);
-    set_dict_val(socket, "recv_mbmax", si.psi.soi_rcv.sbi_mbmax);
-    set_dict_val(socket, "send_mbmax", si.psi.soi_snd.sbi_mbmax);
+    // there is a stat field here, but not sure when it makes sense to include it...
+    // handle_vnode_stat(state, "stat", si.psi.soi_stat, socket);
+    set_dict_val_unsigned(socket, "so", si.psi.soi_so);
+    set_dict_val_unsigned(socket, "pcb", si.psi.soi_pcb);
+    set_dict_val_signed(socket, "type", si.psi.soi_type);
+    set_dict_val_signed(socket, "protocol", si.psi.soi_protocol);
+    set_dict_val_signed(socket, "family", si.psi.soi_family);
+
+    // FIXME: options.. a flag?
+    set_dict_val_signed(socket, "options", si.psi.soi_options);
+    set_dict_val_signed(socket, "linger", si.psi.soi_linger); 
+    set_dict_val_steal_obj(socket, "state", get_soi_flags_value(state, si.psi.soi_state));
+    set_dict_val_signed(socket, "qlen", si.psi.soi_qlen);
+    set_dict_val_signed(socket, "incqlen", si.psi.soi_incqlen);
+    set_dict_val_signed(socket, "qlimit", si.psi.soi_qlimit);
+    set_dict_val_signed(socket, "timeo", si.psi.soi_timeo);
+    set_dict_val_unsigned(socket, "error", si.psi.soi_error);
+    set_dict_val_unsigned(socket, "oobmark", si.psi.soi_oobmark);
+    handle_sockbuf_info(state, "rcv_buff", si.psi.soi_rcv, socket);
+    handle_sockbuf_info(state, "snd_buff", si.psi.soi_snd, socket);
+    set_dict_val_signed(socket, "kind", si.psi.soi_kind);
 
     PyObject* details = NULL;
     const char* keyname = NULL;
@@ -668,6 +846,22 @@ static int handle_socket(ModuleState& state, pid_t pid, int fd, PyObject* out)
     return 0;
 }
 
+static int handle_vnode_info(ModuleState& state, const char* key, const vnode_info& info,
+        PyObject* out) 
+{
+    PyObject* vnode_info = PyDict_New();
+    if (vnode_info == NULL) {
+        return -1;
+    }
+
+    // fIXME: catch errors
+    handle_vnode_stat(state, "stat", info.vi_stat, vnode_info);
+    set_dict_val_signed(vnode_info, "type", info.vi_type);
+    // array of 2 int32 - val[2]
+    //set_dict_val_signed(socket, "fsid", vi.pvip.vip_vi.vi_fsid);
+    return set_dict_val_steal_obj(out, key, vnode_info);
+}
+
 static int handle_vnode(ModuleState& state, pid_t pid, int fd, PyObject* out) 
 {
     vnode_fdinfowithpath vi;
@@ -682,41 +876,40 @@ static int handle_vnode(ModuleState& state, pid_t pid, int fd, PyObject* out)
         return -1;
     }
 
-    PyObject* details = PyDict_New();
-    if (details == NULL) {
+    PyObject* vnode = PyDict_New();
+    if (vnode == NULL) {
         return -1;
     }
 
-    // FIXME: is this the correct conversion for FS encoding?
-    // fIXME: catch errors
-    set_dict_val_steal_obj(details, "path", PyUnicode_FromString(vi.pvip.vip_path));
-    set_dict_val_steal_obj(details, "ifmt", get_ifmt(state, vi.pvip.vip_vi.vi_stat.vst_mode & S_IFMT));
-    set_dict_val_steal_obj(details, "open_mode", get_open_mode_flags_value(state, vi.pfi.fi_openflags));
-    set_dict_val(details, "inode", vi.pvip.vip_vi.vi_stat.vst_ino);
-    set_dict_val(details, "offset", vi.pfi.fi_offset);
-    set_dict_val(details, "status", vi.pfi.fi_status);
+    // FIXME: catch errors
+    handle_si_common(state, vi.pfi, out);
 
-    set_dict_val_steal_obj(out, "vnode", details);
-#if 0
-TODO:
-    device/rdev
-	int32_t                 fi_type;
-	uint32_t                fi_guardflags;
-#endif
+    // FIXME: is this the correct conversion for FS encoding?
+    set_dict_val_steal_obj(vnode, "path", PyUnicode_FromString(vi.pvip.vip_path));
+
+    handle_vnode_info(state, "vnode_info", vi.pvip.vip_vi, vnode);
+    set_dict_val_steal_obj(out, "vnode", vnode);
+
     return 0;
 }
 
 static int handle_pipe(ModuleState& state, pid_t pid, int fd, PyObject* out) 
 {
-    // struct pipe_fdinfo pi;
-    // size_t size = proc_pidfdinfo(pid, fd, PROC_PIDFDPIPEINFO, &pi, sizeof(pi));
+    struct pipe_fdinfo pi;
+    size_t size = proc_pidfdinfo(pid, fd, PROC_PIDFDPIPEINFO, &pi, sizeof(pi));
+    // FIXME: catch error
+    handle_si_common(state, pi.pfi, out);
+    (void)size;
     return 0;
 }
 
 static int handle_kqueue(ModuleState& state, pid_t pid, int fd, PyObject* out) 
 {
-    // struct kqueue_fdinfo kq;
-    // size_t size  = proc_pidfdinfo(pid, fd, PROC_PIDFDKQUEUEINFO, &kq, sizeof(kq));
+    struct kqueue_fdinfo kqi;
+    size_t size  = proc_pidfdinfo(pid, fd, PROC_PIDFDKQUEUEINFO, &kqi, sizeof(kqi));
+    // FIXME: catch error
+    handle_si_common(state, kqi.pfi, out);
+    (void)size;
     return 0;
 }
 
@@ -773,10 +966,10 @@ static PyObject* get_fd_info(PyObject* self, PyObject *args)
         case PROX_FDTYPE_KQUEUE:
             ret = handle_kqueue(state, pid, fd, out);
             break;
-        case PROX_FDTYPE_ATALK:
         case PROX_FDTYPE_PSHM:
         case PROX_FDTYPE_PSEM:
         case PROX_FDTYPE_FSEVENTS:
+        case PROX_FDTYPE_ATALK:
         case PROX_FDTYPE_NETPOLICY:
         case PROX_FDTYPE_CHANNEL:
         case PROX_FDTYPE_NEXUS:
@@ -801,7 +994,6 @@ static int miniproc_exec(PyObject *module)
     // called, which will clean up. We just have to leave the state
     // sane enough for it to work. Python guarantees that state will be zeroed before 
     // calling us (PEP 3121) so don't have to worry about garbage getting in.
-
     PyObject* ipaddr_mod = PyImport_ImportModule("ipaddress");
     if (ipaddr_mod == NULL) {
         return -1;
