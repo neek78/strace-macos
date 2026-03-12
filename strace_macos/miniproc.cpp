@@ -3,6 +3,7 @@
 #define PY_SSIZE_T_CLEAN
 
 #include <Python.h>
+#include <datetime.h> 
 
 #include <errno.h>
 #include <stdio.h>
@@ -64,7 +65,7 @@ private:
     ModuleState(ModuleState&);
 };
 
-ModuleState& get_module_state(PyObject* module)
+static ModuleState& get_module_state(PyObject* module)
 {
     assert(module);
     void* state = PyModule_GetState(module);
@@ -88,8 +89,13 @@ static int set_dict_val_unsigned(PyObject* dict, const char* key, uint64_t value
 }
 
 static int set_dict_time(PyObject* dict, const char* key, int64_t sec, int64_t nsec) {
-    // FIXME: implement. Convert into some python friendly timeval type
-    return 0;
+    double v = sec + (1e-9 * nsec);
+    PyObject* f = PyFloat_FromDouble(v);
+    PyObject* args = PyTuple_Pack(1, f);
+    
+    PyObject* dt = PyDateTime_FromTimestamp(args);
+    int ret = PyDict_SetItemString(dict, key, dt);
+    return ret;
 }
 
 // put obj in the dict without touching refcnt. Handles NULL for value
@@ -552,7 +558,7 @@ static int build_enums(PyObject* module)
     return 0;
 }
 
-bool inet_is_ipv4(const socket_info& si) 
+static bool inet_is_ipv4(const socket_info& si) 
 {
     const int family = si.soi_family;
     assert(family == AF_INET || family == AF_INET6);
@@ -560,7 +566,7 @@ bool inet_is_ipv4(const socket_info& si)
 }
 
 // extract ipv4 address
-PyObject* extract_address(ModuleState& state, const in4in6_addr& addr)
+static PyObject* extract_address(ModuleState& state, const in4in6_addr& addr)
 {
     assert(state.ipv4_ctor);
 
@@ -577,7 +583,7 @@ PyObject* extract_address(ModuleState& state, const in4in6_addr& addr)
 }
 
 // extract ipv6 address
-PyObject* extract_address(ModuleState& state, const in6_addr& addr)
+static PyObject* extract_address(ModuleState& state, const in6_addr& addr)
 {
     assert(state.ipv6_ctor);
 
@@ -601,21 +607,18 @@ PyObject* extract_address(ModuleState& state, const T& addr, bool is_ipv4)
         extract_address(state, addr.ina_6);
 }
 
-int handle_tcp_socket(ModuleState& state, const socket_info& si, PyObject* out) 
+static int handle_tcp_socket(ModuleState& state, const socket_info& si, PyObject* out) 
 {
     const bool is_ipv4 = inet_is_ipv4(si);
 
     //FIXME: leaks
     PyDict_SetItemString(out, "kind", PyUnicode_FromString("tcp"));
 
-    PyObject* local_addr = extract_address(state, si.soi_proto.pri_tcp.tcpsi_ini.insi_laddr, is_ipv4);
-    PyObject* remote_addr = extract_address(state, si.soi_proto.pri_tcp.tcpsi_ini.insi_faddr, is_ipv4);
+    set_dict_val_steal_obj(out, "local_addr", 
+            extract_address(state, si.soi_proto.pri_tcp.tcpsi_ini.insi_laddr, is_ipv4));
 
-    PyDict_SetItemString(out, "local_addr", local_addr);
-    PyDict_SetItemString(out, "remote_addr", remote_addr);
-
-    Py_CLEAR(local_addr);
-    Py_CLEAR(remote_addr);
+    set_dict_val_steal_obj(out, "remote_addr", 
+            extract_address(state, si.soi_proto.pri_tcp.tcpsi_ini.insi_faddr, is_ipv4));
 
     set_dict_val_signed(out, "local_port", ntohs(si.soi_proto.pri_tcp.tcpsi_ini.insi_lport));
     set_dict_val_signed(out, "remote_port", ntohs(si.soi_proto.pri_tcp.tcpsi_ini.insi_fport));
@@ -629,11 +632,11 @@ int handle_in_socket(ModuleState& state, const socket_info& si, PyObject* out)
 {
     const bool is_ipv4 = inet_is_ipv4(si);
 
-    PyObject* local_addr = extract_address(state, si.soi_proto.pri_in.insi_laddr, is_ipv4);
-    PyObject* remote_addr = extract_address(state, si.soi_proto.pri_in.insi_faddr, is_ipv4);
+    set_dict_val_steal_obj(out, "local_addr", 
+        extract_address(state, si.soi_proto.pri_in.insi_laddr, is_ipv4));
 
-    PyDict_SetItemString(out, "local_addr", local_addr);
-    PyDict_SetItemString(out, "remote_addr", remote_addr);
+    set_dict_val_steal_obj(out, "remote_addr", 
+        extract_address(state, si.soi_proto.pri_in.insi_faddr, is_ipv4));
 
     set_dict_val_signed(out, "local_port", ntohs(si.soi_proto.pri_in.insi_lport));
     set_dict_val_signed(out, "remote_port", ntohs(si.soi_proto.pri_in.insi_fport));
@@ -659,7 +662,7 @@ enum {
 };
 #endif
 
-PyObject* handle_inet_socket(ModuleState& state, const socket_fdinfo& si)
+static PyObject* handle_inet_socket(ModuleState& state, const socket_fdinfo& si)
 {
     PyObject* out = PyDict_New();
     if(out == NULL) {
@@ -686,7 +689,7 @@ PyObject* handle_inet_socket(ModuleState& state, const socket_fdinfo& si)
 }
 
 
-PyObject* handle_unix_socket(ModuleState& state, const socket_fdinfo& si)
+static PyObject* handle_unix_socket(ModuleState& state, const socket_fdinfo& si)
 {
     PyObject* out = PyDict_New();
     if(out == NULL) {
@@ -717,10 +720,13 @@ static int handle_si_common(ModuleState& state, const proc_fileinfo& pfi, PyObje
 static int handle_dev(PyObject* out, const char* name, int32_t val) 
 {
     // FIXME create dict here
-    PyObject* dev = Py_BuildValue("(ii)", major(val), minor(val));
+    PyObject* dev = PyDict_New();
     if (dev == NULL) {
         return -1;
     }
+    set_dict_val_unsigned(dev, "major", major(val));
+    set_dict_val_unsigned(dev, "minor", minor(val));
+
     return set_dict_val_steal_obj(out, name, dev);
 }
 
@@ -1021,8 +1027,10 @@ static PyObject* get_fd_info(PyObject* self, PyObject *args)
 
 
 static int miniproc_exec(PyObject *module) 
-{
+{    
     //printf("miniproc_exec mod=%p state=%p\n", module, PyModule_GetState(module));
+    PyDateTime_IMPORT; 
+    
     ModuleState& state = get_module_state(module);
 
     // note that even in the case of us giving an error return, miniproc_free() is still
