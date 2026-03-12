@@ -572,16 +572,16 @@ PyObject* extract_address(ModuleState& state, const T& addr, bool is_ipv4)
         extract_ipv6_address(state, addr.ina_6);
 }
 
-int handle_tcp_socket(ModuleState& state, const socket_fdinfo& si, PyObject* out) 
+int handle_tcp_socket(ModuleState& state, const socket_info& si, PyObject* out) 
 {
-    const int family = si.psi.soi_family;
+    const int family = si.soi_family;
     const bool is_ipv4 = family == AF_INET;
 
     //FIXME: leaks
     PyDict_SetItemString(out, "kind", PyUnicode_FromString("tcp"));
 
-    PyObject* local_addr = extract_address(state, si.psi.soi_proto.pri_tcp.tcpsi_ini.insi_laddr, is_ipv4);
-    PyObject* remote_addr = extract_address(state, si.psi.soi_proto.pri_tcp.tcpsi_ini.insi_faddr, is_ipv4);
+    PyObject* local_addr = extract_address(state, si.soi_proto.pri_tcp.tcpsi_ini.insi_laddr, is_ipv4);
+    PyObject* remote_addr = extract_address(state, si.soi_proto.pri_tcp.tcpsi_ini.insi_faddr, is_ipv4);
 
     PyDict_SetItemString(out, "local_addr", local_addr);
     PyDict_SetItemString(out, "remote_addr", remote_addr);
@@ -589,31 +589,31 @@ int handle_tcp_socket(ModuleState& state, const socket_fdinfo& si, PyObject* out
     Py_CLEAR(local_addr);
     Py_CLEAR(remote_addr);
 
-    long local_port = ntohs(si.psi.soi_proto.pri_tcp.tcpsi_ini.insi_lport);
-    long remote_port = ntohs(si.psi.soi_proto.pri_tcp.tcpsi_ini.insi_fport);
+    long local_port = ntohs(si.soi_proto.pri_tcp.tcpsi_ini.insi_lport);
+    long remote_port = ntohs(si.soi_proto.pri_tcp.tcpsi_ini.insi_fport);
 
     //FIXME: leaks
     PyDict_SetItemString(out, "local_port", PyLong_FromLong(local_port));
     PyDict_SetItemString(out, "remote_port", PyLong_FromLong(remote_port));
 
-    long tcp_state = si.psi.soi_proto.pri_tcp.tcpsi_state;
+    long tcp_state = si.soi_proto.pri_tcp.tcpsi_state;
     PyDict_SetItemString(out, "tcp_state", get_tcp_state(state, tcp_state));
     return 0;
 }
 
-int handle_in_socket(ModuleState& state, const socket_fdinfo& si, PyObject* out) 
+int handle_in_socket(ModuleState& state, const socket_info& si, PyObject* out) 
 {
-    const int family = si.psi.soi_family;
+    const int family = si.soi_family;
     const bool is_ipv4 = family == AF_INET;
 
-    PyObject* local_addr = extract_address(state, si.psi.soi_proto.pri_in.insi_laddr, is_ipv4);
-    PyObject* remote_addr = extract_address(state, si.psi.soi_proto.pri_in.insi_faddr, is_ipv4);
+    PyObject* local_addr = extract_address(state, si.soi_proto.pri_in.insi_laddr, is_ipv4);
+    PyObject* remote_addr = extract_address(state, si.soi_proto.pri_in.insi_faddr, is_ipv4);
 
     PyDict_SetItemString(out, "local_addr", local_addr);
     PyDict_SetItemString(out, "remote_addr", remote_addr);
 
-    long local_port = ntohs(si.psi.soi_proto.pri_in.insi_lport);
-    long remote_port = ntohs(si.psi.soi_proto.pri_in.insi_fport);
+    long local_port = ntohs(si.soi_proto.pri_in.insi_lport);
+    long remote_port = ntohs(si.soi_proto.pri_in.insi_fport);
 
     PyDict_SetItemString(out, "local_port", PyLong_FromLong(local_port));
     PyDict_SetItemString(out, "remote_port", PyLong_FromLong(remote_port));
@@ -650,10 +650,10 @@ PyObject* handle_inet_socket(ModuleState& state, const socket_fdinfo& si)
 
     switch(si.psi.soi_kind) {
         case SOCKINFO_TCP: // tcp socket
-            handle_tcp_socket(state, si, out);
+            handle_tcp_socket(state, si.psi, out);
             break;
         case SOCKINFO_IN: // inet, non-tcp socket
-            handle_in_socket(state, si, out);
+            handle_in_socket(state, si.psi, out);
             break;
         default:
             PyErr_Format(PyExc_RuntimeError, 
@@ -695,6 +695,7 @@ static int handle_si_common(ModuleState& state, const proc_fileinfo& pfi, PyObje
 
 static int handle_dev(PyObject* out, const char* name, int32_t val) 
 {
+    // FIXME create dict here
     PyObject* dev = Py_BuildValue("(ii)", major(val), minor(val));
     if (dev == NULL) {
         return -1;
@@ -792,13 +793,13 @@ static int handle_socket(ModuleState& state, pid_t pid, int fd, PyObject* out)
         return -1;
     }
 
+    // FIXME: catch error
+    handle_si_common(state, si.pfi, out);
+
     PyObject* socket = PyDict_New();
     if (socket == NULL) {
         return -1;
     }
-
-    // FIXME: catch error
-    handle_si_common(state, si.pfi, out);
 
     const int family = si.psi.soi_family;
 
@@ -862,8 +863,11 @@ static int handle_vnode_info(ModuleState& state, const char* key, const vnode_in
     // fIXME: catch errors
     handle_vnode_stat(state, "stat", info.vi_stat, vnode_info);
     set_dict_val_signed(vnode_info, "type", info.vi_type);
-    // array of 2 int32 - val[2]
-    //set_dict_val_signed(socket, "fsid", vi.pvip.vip_vi.vi_fsid);
+
+    set_dict_val_steal_obj(out, "fsid", 
+        Py_BuildValue("(ii)", 
+            info.vi_fsid.val[0], info.vi_fsid.val[1]));
+
     return set_dict_val_steal_obj(out, key, vnode_info);
 }
 
