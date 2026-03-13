@@ -911,17 +911,28 @@ static int handle_vnode(ModuleState& state, pid_t pid, int fd, PyObject* out)
     return 0;
 }
 
+template<typename BufferType>
+static int call_proc_pidfdinfo(pid_t pid, int fd, int flavor, BufferType& buffer) 
+{
+    size_t size = proc_pidfdinfo(pid, fd, flavor, &buffer, sizeof(buffer));
+    if (size <= 0) {
+        PyErr_Format(PyExc_OSError, 
+            "proc_pidfdinfo() flavor %d failed: errno %d size %d", 
+            flavor, errno, sizeof(buffer));
+        return -1;
+    } else if (size < sizeof(buffer)) {
+        PyErr_Format(PyExc_RuntimeError, 
+            "proc_pidfdinfo() flavor %d: return value wrong size %d vs %d", 
+            flavor, size, sizeof(buffer));
+        return -1;
+    }
+    return 0;
+}
+
 static int handle_pipe(ModuleState& state, pid_t pid, int fd, PyObject* out) 
 {
     struct pipe_fdinfo pi;
-    size_t size = proc_pidfdinfo(pid, fd, PROC_PIDFDPIPEINFO, &pi, sizeof(pi));
-    if (size <= 0) {
-        PyErr_Format(PyExc_RuntimeError, 
-            "proc_pidfdinfo PROC_PIDFDKQUEUEINFO: failed, errno %d", errno);
-        return -1;
-    } else if (size < sizeof(pi)) {
-        PyErr_Format(PyExc_RuntimeError, 
-            "proc_pidfdinfo PROC_PIDFDKQUEUEINFO: return value wrong size (%d)", size);
+    if (call_proc_pidfdinfo(pid, fd, PROC_PIDFDPIPEINFO, pi) < 0) {
         return -1;
     }
 
@@ -937,14 +948,7 @@ static int handle_pipe(ModuleState& state, pid_t pid, int fd, PyObject* out)
 static int handle_kqueue(ModuleState& state, pid_t pid, int fd, PyObject* out) 
 {
     struct kqueue_fdinfo kqi;
-    size_t size  = proc_pidfdinfo(pid, fd, PROC_PIDFDKQUEUEINFO, &kqi, sizeof(kqi));
-    if (size <= 0) {
-        PyErr_Format(PyExc_RuntimeError, 
-            "proc_pidfdinfo PROC_PIDFDKQUEUEINFO: failed, errno %d", errno);
-        return -1;
-    } else if (size < sizeof(kqi)) {
-        PyErr_Format(PyExc_RuntimeError, 
-            "proc_pidfdinfo PROC_PIDFDKQUEUEINFO: return value wrong size (%d)", size);
+    if (call_proc_pidfdinfo(pid, fd, PROC_PIDFDKQUEUEINFO, kqi) < 0) {
         return -1;
     }
 
@@ -953,6 +957,64 @@ static int handle_kqueue(ModuleState& state, pid_t pid, int fd, PyObject* out)
     handle_vnode_stat(state, "stat", kqi.kqueueinfo.kq_stat, out);
     return 0;
 }
+
+static int handle_pshm(ModuleState& state, pid_t pid, int fd, PyObject* out) 
+{
+    struct pshm_fdinfo pshmi;
+    size_t size  = proc_pidfdinfo(pid, fd, PROC_PIDFDPSHMINFO, &pshmi, sizeof(pshmi));
+    if (size <= 0) {
+        PyErr_Format(PyExc_RuntimeError, 
+            "proc_pidfdinfo PROC_PIDFDPSHMINFO: failed, errno %d", errno);
+        return -1;
+    } else if (size < sizeof(pshmi)) {
+        PyErr_Format(PyExc_RuntimeError, 
+            "proc_pidfdinfo PROC_PIDFDPSHMINFO: return value wrong size (%d)", size);
+        return -1;
+    }
+
+    handle_si_common(state, pshmi.pfi, out);
+    handle_vnode_stat(state, "stat", pshmi.pshminfo.pshm_stat, out);
+    set_dict_val_unsigned(out, "mapaddr", pshmi.pshminfo.pshm_mappaddr);
+    set_dict_val_steal_obj(out, "name", PyUnicode_FromString(pshmi.pshminfo.pshm_name));
+
+    return 0;
+}
+
+static int handle_psem(ModuleState& state, pid_t pid, int fd, PyObject* out) 
+{
+    struct psem_fdinfo psemi;
+    size_t size  = proc_pidfdinfo(pid, fd, PROC_PIDFDPSEMINFO, &psemi, sizeof(psemi));
+    if (size <= 0) {
+        PyErr_Format(PyExc_RuntimeError, 
+            "proc_pidfdinfo PROC_PIDFDPSHMINFO: failed, errno %d", errno);
+        return -1;
+    } else if (size < sizeof(psemi)) {
+        PyErr_Format(PyExc_RuntimeError, 
+            "proc_pidfdinfo PROC_PIDFDPSHMINFO: return value wrong size (%d)", size);
+        return -1;
+    }
+
+    return 0;
+}
+
+static int handle_fd_channel(ModuleState& state, pid_t pid, int fd, PyObject* out) 
+{
+    struct psem_fdinfo psemi;
+    size_t size  = proc_pidfdinfo(pid, fd, PROC_PIDFDPSEMINFO, &psemi, sizeof(psemi));
+    if (size <= 0) {
+        PyErr_Format(PyExc_RuntimeError, 
+            "proc_pidfdinfo PROC_PIDFDPSHMINFO: failed, errno %d", errno);
+        return -1;
+    } else if (size < sizeof(psemi)) {
+        PyErr_Format(PyExc_RuntimeError, 
+            "proc_pidfdinfo PROC_PIDFDPSHMINFO: return value wrong size (%d)", size);
+        return -1;
+    }
+
+    return 0;
+}
+//#define PROC_PIDFDATALKINFO             8
+//#define PROC_PIDFDCHANNELINFO           10
 
 static PyObject* get_fd_info(PyObject* self, PyObject *args)  
 {
@@ -1008,8 +1070,10 @@ static PyObject* get_fd_info(PyObject* self, PyObject *args)
             ret = handle_kqueue(state, pid, fd, out);
             break;
         case PROX_FDTYPE_PSHM:
-        case PROX_FDTYPE_PSEM:
+            ret = handle_pshm(state, pid, fd, out);
+            break;
         case PROX_FDTYPE_FSEVENTS:
+        case PROX_FDTYPE_PSEM:
         case PROX_FDTYPE_ATALK:
         case PROX_FDTYPE_NETPOLICY:
         case PROX_FDTYPE_CHANNEL:
