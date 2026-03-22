@@ -12,14 +12,19 @@
 #include <libproc.h>
 #include <sys/fcntl.h>
 
+#define BUFFER_GROW_SIZE 256
+
 struct ModuleState {
+    proc_fdinfo* fd_buffer;
+    size_t buffer_size; // in bytes
+
     PyObject* ipv4_ctor;
     PyObject* ipv6_ctor;
 
-    PyObject* fd_type_enums;
-    PyObject* ifmt_enums;
-    PyObject* address_family_enums;
-    PyObject* tcp_state_enums;
+    PyObject* fd_type_enum;
+    PyObject* ifmt_enum;
+    PyObject* address_family_enum;
+    PyObject* tcp_state_enum;
 
     PyObject* soi_flags;
     PyObject* open_mode_flags;
@@ -28,22 +33,27 @@ struct ModuleState {
 
     void grow_buffer() 
     {
-        // PyMem_Malloc
-    }   
+        buffer_size += BUFFER_GROW_SIZE * sizeof(proc_fdinfo);
+        fd_buffer = (proc_fdinfo*)PyMem_Realloc(fd_buffer, buffer_size);
+    } 
+
     int clear() 
     {
-        Py_XDECREF(ipv4_ctor);
-        Py_XDECREF(ipv6_ctor);
+        PyMem_Free(fd_buffer);
+        fd_buffer = NULL;
+        
+        Py_CLEAR(ipv4_ctor);
+        Py_CLEAR(ipv6_ctor);
 
-        Py_XDECREF(fd_type_enums);
-        Py_XDECREF(ifmt_enums);
-        Py_XDECREF(address_family_enums);
-        Py_XDECREF(tcp_state_enums);
+        Py_CLEAR(fd_type_enum);
+        Py_CLEAR(ifmt_enum);
+        Py_CLEAR(address_family_enum);
+        Py_CLEAR(tcp_state_enum);
 
-        Py_XDECREF(soi_flags);
-        Py_XDECREF(open_mode_flags);
-        Py_XDECREF(proc_fp_flags);
-        Py_XDECREF(proc_fi_guard_flags);
+        Py_CLEAR(soi_flags);
+        Py_CLEAR(open_mode_flags);
+        Py_CLEAR(proc_fp_flags);
+        Py_CLEAR(proc_fi_guard_flags);
         return 0;
     }
 
@@ -52,10 +62,10 @@ struct ModuleState {
         Py_VISIT(ipv4_ctor);
         Py_VISIT(ipv6_ctor);
 
-        Py_VISIT(fd_type_enums);
-        Py_VISIT(ifmt_enums);
-        Py_VISIT(address_family_enums);
-        Py_VISIT(tcp_state_enums);
+        Py_VISIT(fd_type_enum);
+        Py_VISIT(ifmt_enum);
+        Py_VISIT(address_family_enum);
+        Py_VISIT(tcp_state_enum);
 
         Py_VISIT(soi_flags);
         Py_VISIT(open_mode_flags);
@@ -171,31 +181,6 @@ static int add_enum_value(PyObject* attrs, const char* name, int value, const ch
     return ret;
 }
 
-static PyObject* make_reverse_enum(PyObject* this_enum_type, PyObject* values)
-{
-    assert(this_enum_type != NULL);
-    assert(values != NULL);
-
-    PyObject* key = NULL;
-    PyObject* value = NULL;
-    Py_ssize_t pos = 0;
-
-    PyObject* ret = PyDict_New();
-    if (ret == NULL) {
-        PyErr_NoMemory();
-        return NULL;
-    }
-
-    while (PyDict_Next(values, &pos, &key, &value)) {
-        PyObject* e = PyObject_GetAttr(this_enum_type, key);
-        // FIXME: check item's not already set
-        // FIXME: check error return
-        //assert(idx < size);
-        PyDict_SetItem(ret, value, e);
-    }
-    return ret;
-}
-
 static PyObject* create_enum_internal(PyObject* module, const char* py_typename, 
         const char* enum_name, PyObject* values) 
 {
@@ -250,21 +235,13 @@ static PyObject* create_flags(PyObject* module, const char* enum_name, PyObject*
 
 static PyObject* create_enum(PyObject* module, const char* enum_name, PyObject* values)
 {
-    PyObject* enum_obj = create_enum_internal(module, "Enum", enum_name, values);
-    if (enum_obj == NULL) {
-        return NULL;
-    }
-
-    PyObject* ret = make_reverse_enum(enum_obj, values);
-    return ret;
+    return create_enum_internal(module, "Enum", enum_name, values);
 }
 
-static PyObject* get_enum_value(PyObject* enum_list, int idx) {
-    //PyObject *enum_instance = PyObject_CallFunction(enum_type, "(i)", value);
-
-    assert(enum_list);
-    PyObject* o = PyLong_FromLong(idx);
-    return PyDict_GetItem(enum_list, o);
+static PyObject* get_enum_value(PyObject* enum_type, int idx) {
+    assert(enum_type);
+    PyObject *enum_instance = PyObject_CallFunction(enum_type, "(i)", idx);
+    return enum_instance;
 }
 
 static PyObject* get_flags_object(PyObject* flags_type, int flags) {
@@ -315,10 +292,10 @@ static int build_enum_tcp_state(PyObject* module)
     add_enum_value(attrs, "TIME_WAIT", TSI_S_TIME_WAIT, "in 2*msl quiet wait after close");
 
     struct ModuleState& state = get_module_state(module);
-    state.tcp_state_enums = create_enum(module, "TcpState", attrs);
+    state.tcp_state_enum = create_enum(module, "TcpState", attrs);
 
     Py_DECREF(attrs);
-    return state.tcp_state_enums == NULL ? -1 : 0;
+    return state.tcp_state_enum == NULL ? -1 : 0;
 };
 
 static int build_enum_fd_type(PyObject* module) 
@@ -343,10 +320,10 @@ static int build_enum_fd_type(PyObject* module)
 
     struct ModuleState& state = get_module_state(module);
 
-    state.fd_type_enums = create_enum(module, "FDType", attrs);
+    state.fd_type_enum = create_enum(module, "FDType", attrs);
 
     Py_DECREF(attrs);
-    return state.fd_type_enums == NULL ? -1 : 0;
+    return state.fd_type_enum == NULL ? -1 : 0;
 };
 
 static int build_enum_ifmt(PyObject* module) 
@@ -367,10 +344,10 @@ static int build_enum_ifmt(PyObject* module)
 
     struct ModuleState& state = get_module_state(module);
 
-    state.ifmt_enums = create_enum(module, "IFMT", attrs);
+    state.ifmt_enum = create_enum(module, "IFMT", attrs);
 
     Py_DECREF(attrs);
-    return state.ifmt_enums == NULL ? -1 : 0;
+    return state.ifmt_enum == NULL ? -1 : 0;
 };
 
 
@@ -390,7 +367,7 @@ static int build_address_family(PyObject* module)
     add_enum_value(attrs, "NS", AF_NS,"XEROX NS protocols");
     add_enum_value(attrs, "ISO", AF_ISO,"ISO protocols");
     add_enum_value(attrs, "ECMA", AF_ECMA,"European computer manufacturers");
-    add_enum_value(attrs, "DATAKit", AF_DATAKIT,"datakit protocols");
+    add_enum_value(attrs, "DATAKIT", AF_DATAKIT,"datakit protocols");
     add_enum_value(attrs, "CCITT", AF_CCITT,"CCITT protocols, X.25 etc");
     add_enum_value(attrs, "SNA", AF_SNA,"IBM SNA");
     add_enum_value(attrs, "DECnet", AF_DECnet,"DECnet");
@@ -418,10 +395,10 @@ static int build_address_family(PyObject* module)
 
     struct ModuleState& state = get_module_state(module);
 
-    state.address_family_enums = create_enum(module, "AddressFamily", attrs);
+    state.address_family_enum = create_enum(module, "AddressFamily", attrs);
 
     Py_DECREF(attrs);
-    return state.address_family_enums == NULL ? -1 : 0;
+    return state.address_family_enum == NULL ? -1 : 0;
 }
 
 static int build_flags_proc_fp(PyObject* module) 
@@ -496,8 +473,6 @@ static int build_flags_soi(PyObject* module)
     return state.soi_flags == NULL ? -1 : 0;
 };
 
-
-
 static int build_flags_open_mode(PyObject* module) 
 {
     PyObject* attrs = PyDict_New();
@@ -549,19 +524,19 @@ static int build_flags_open_mode(PyObject* module)
 };
 
 static PyObject* get_fd_type(ModuleState& state, int fd_type) {
-    return get_enum_value(state.fd_type_enums, fd_type);
+    return get_enum_value(state.fd_type_enum, fd_type);
 }
 
 static PyObject* get_ifmt(ModuleState& state, int ifmt) {
-    return get_enum_value(state.ifmt_enums, ifmt);
+    return get_enum_value(state.ifmt_enum, ifmt);
 }
 
 static PyObject* get_address_family(ModuleState& state, int family) {
-    return get_enum_value(state.address_family_enums, family);
+    return get_enum_value(state.address_family_enum, family);
 }
 
 static PyObject* get_tcp_state(ModuleState& state, int tcp_state) {
-    return get_enum_value(state.tcp_state_enums, tcp_state);
+    return get_enum_value(state.tcp_state_enum, tcp_state);
 }
 
 static PyObject* get_soi_flags_value(ModuleState& state, int flags) {
@@ -1064,24 +1039,34 @@ static PyObject* get_fd_info(PyObject* self, PyObject *args)
         return NULL;
     }
 
-    // FIXME: heap alloc
-    proc_fdinfo buffer[1024];
+    ModuleState& state = get_module_state(self);
+    assert(state.fd_buffer != NULL);
 
-    int n = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, &buffer, sizeof(buffer));
-    if (n <= 0) {
-        PyErr_Format(PyExc_RuntimeError, "proc_pidinfo failed, errno %d", errno);
-        return NULL;
+    int count = -1;
+    while(true) {
+        int n = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, state.fd_buffer, state.buffer_size);
+        if (n <= 0) {
+            PyErr_Format(PyExc_RuntimeError, "proc_pidinfo failed, errno %d", errno);
+            return NULL;
+        } else if (n >= (int)state.buffer_size) {
+            // not enough buffer space
+            state.grow_buffer();
+            continue;
+        }
+
+        count = n / sizeof(struct proc_fdinfo);
+        assert((size_t)n <= state.buffer_size);
+        break;
     }
 
-    int count = n / sizeof(struct proc_fdinfo);
 
     bool found = false;
     uint32_t fd_type = 0;
 
     // search for fd in returned set
     for (int i = 0; i < count; i++) {
-        if (buffer[i].proc_fd == fd) {
-            fd_type = buffer[i].proc_fdtype;
+        if (state.fd_buffer[i].proc_fd == fd) {
+            fd_type = state.fd_buffer[i].proc_fdtype;
             found = true;
             break;
         }
@@ -1092,7 +1077,6 @@ static PyObject* get_fd_info(PyObject* self, PyObject *args)
         return NULL;
     }
 
-    ModuleState& state = get_module_state(self);
     PyObject* out = PyDict_New();
     if (out == NULL) {
         PyErr_NoMemory();
@@ -1149,6 +1133,12 @@ static int miniproc_exec(PyObject *module)
     PyDateTime_IMPORT; 
     
     ModuleState& state = get_module_state(module);
+    state.buffer_size = 0;
+    state.grow_buffer();
+    if (state.fd_buffer == NULL) {
+        PyErr_NoMemory();
+        return -1;
+    }
 
     // note that even in the case of us giving an error return, miniproc_free() is still
     // called, which will clean up. We just have to leave the state

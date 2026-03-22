@@ -1,3 +1,4 @@
+#!/Users/nick/inst/python.debug/bin/python3
 
 #import IPython 
 import pprint
@@ -6,31 +7,7 @@ import miniproc
 print('miniproc file: ', miniproc.__file__)
 print()
 
-pprint.pp(miniproc.get_fd_info(77538, 5))
-print()
+for i in range(8):
+    pprint.pp(miniproc.get_fd_info(9960, i))
+    print("yep", i)
 
-pprint.pp(miniproc.get_fd_info(77538, 7))
-print()
-
-pprint.pp(miniproc.get_fd_info(85499, 3))
-print()
-
-pprint.pp(miniproc.get_fd_info(73846, 11))
-print()
-
-pprint.pp(miniproc.get_fd_info(73846, 20))
-print()
-
-pprint.pp(miniproc.get_fd_info(73846, 1))
-print()
-
-pprint.pp(miniproc.get_fd_info(73846, 3))
-print()
-
-pprint.pp(miniproc.get_fd_info(78793, 1))
-print()
-
-pprint.pp(miniproc.get_fd_info(78793, 2))
-print()
-
-#IPython.embed()
