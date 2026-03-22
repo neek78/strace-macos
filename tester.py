@@ -1,4 +1,5 @@
 
+#import IPython 
 import pprint
 import miniproc 
 
@@ -31,3 +32,5 @@ print()
 
 pprint.pp(miniproc.get_fd_info(78793, 2))
 print()
+
+#IPython.embed()

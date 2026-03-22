@@ -26,7 +26,12 @@ struct ModuleState {
     PyObject* proc_fp_flags;
     PyObject* proc_fi_guard_flags;
 
-    int clear() {
+    void grow_buffer() 
+    {
+        // PyMem_Malloc
+    }   
+    int clear() 
+    {
         Py_XDECREF(ipv4_ctor);
         Py_XDECREF(ipv6_ctor);
 
@@ -39,11 +44,11 @@ struct ModuleState {
         Py_XDECREF(open_mode_flags);
         Py_XDECREF(proc_fp_flags);
         Py_XDECREF(proc_fi_guard_flags);
-
         return 0;
     }
 
-    int traverse(visitproc visit, void *arg) {
+    int traverse(visitproc visit, void *arg) 
+    {
         Py_VISIT(ipv4_ctor);
         Py_VISIT(ipv6_ctor);
 
@@ -88,13 +93,42 @@ static int set_dict_val_unsigned(PyObject* dict, const char* key, uint64_t value
     return ret;
 }
 
-static int set_dict_time(PyObject* dict, const char* key, int64_t sec, int64_t nsec) {
+static int set_dict_time(PyObject* dict, const char* key, int64_t sec, int64_t nsec)
+{
+    if (sec == 0) {
+        return 0; // not an error, just a null
+    }
+
     double v = sec + (1e-9 * nsec);
-    PyObject* f = PyFloat_FromDouble(v);
-    PyObject* args = PyTuple_Pack(1, f);
+
+    int ret = -1;
+    PyObject *f = NULL, *args = NULL, *dt = NULL;
+
+    f = PyFloat_FromDouble(v);
+    if (f == NULL) {
+        PyErr_NoMemory();
+        goto out;
+    }
+
+    args = PyTuple_Pack(1, f);
+    if (args == NULL) {
+        PyErr_NoMemory();
+        goto out;
+    }
     
-    PyObject* dt = PyDateTime_FromTimestamp(args);
-    int ret = PyDict_SetItemString(dict, key, dt);
+    dt = PyDateTime_FromTimestamp(args);
+    if (dt == NULL) {
+        PyErr_NoMemory();
+        goto out;
+    }
+
+    ret = PyDict_SetItemString(dict, key, dt);
+
+out:
+    Py_XDECREF(dt);
+    Py_XDECREF(args);
+    Py_XDECREF(f);
+
     return ret;
 }
 
@@ -128,6 +162,8 @@ static int add_enum_value(PyObject* attrs, const char* name, int value, const ch
     if (py_key != NULL && py_val != NULL) {
         ret = 0;
         PyObject_SetItem(attrs, py_key, py_val);
+    } else {
+        PyErr_NoMemory();
     }
 
     Py_XDECREF(py_key);
@@ -146,7 +182,7 @@ static PyObject* make_reverse_enum(PyObject* this_enum_type, PyObject* values)
 
     PyObject* ret = PyDict_New();
     if (ret == NULL) {
-        PyErr_Format(PyExc_MemoryError, "failed to alloc enum reverse dict"); 
+        PyErr_NoMemory();
         return NULL;
     }
 
@@ -170,7 +206,7 @@ static PyObject* create_enum_internal(PyObject* module, const char* py_typename,
     args = PyTuple_Pack(2, name, values);
 
     if (name == NULL || args == NULL) {
-        PyErr_Format(PyExc_MemoryError, "create_enum_internal failed to alloc"); 
+        PyErr_NoMemory();
         goto out;
     }
 
@@ -224,6 +260,8 @@ static PyObject* create_enum(PyObject* module, const char* enum_name, PyObject* 
 }
 
 static PyObject* get_enum_value(PyObject* enum_list, int idx) {
+    //PyObject *enum_instance = PyObject_CallFunction(enum_type, "(i)", value);
+
     assert(enum_list);
     PyObject* o = PyLong_FromLong(idx);
     return PyDict_GetItem(enum_list, o);
@@ -260,7 +298,7 @@ static int build_enum_tcp_state(PyObject* module)
 {
     PyObject* attrs = PyDict_New();
     if (attrs == NULL) {
-        PyErr_Format(PyExc_MemoryError, "failed to allocate for enum tcp_state");
+        PyErr_NoMemory();
         return -1;
     }
 
@@ -287,7 +325,7 @@ static int build_enum_fd_type(PyObject* module)
 {
     PyObject* attrs = PyDict_New();
     if (attrs == NULL) {
-        PyErr_Format(PyExc_MemoryError, "failed to allocate for enum fd_type");
+        PyErr_NoMemory();
         return -1;
     }
 
@@ -315,7 +353,7 @@ static int build_enum_ifmt(PyObject* module)
 {
     PyObject* attrs = PyDict_New();
     if (attrs == NULL) {
-        PyErr_Format(PyExc_MemoryError, "failed to allocate for enum ifmt");
+        PyErr_NoMemory();
         return -1;
     }
 
@@ -340,7 +378,7 @@ static int build_address_family(PyObject* module)
 {
     PyObject* attrs = PyDict_New();
     if (attrs == NULL) {
-        PyErr_Format(PyExc_MemoryError, "failed to allocate for build_address_family");
+        PyErr_NoMemory();
         return -1;
     }
     add_enum_value(attrs, "UNSPEC", AF_UNSPEC, "unspecified");
@@ -390,7 +428,7 @@ static int build_flags_proc_fp(PyObject* module)
 {
     PyObject* attrs = PyDict_New();
     if (attrs == NULL) {
-        PyErr_Format(PyExc_MemoryError, "failed to allocate for flags fp");
+        PyErr_NoMemory();
         return -1;
     }
     add_enum_value(attrs, "SHARED", PROC_FP_SHARED, "shared by more than one fd");
@@ -410,7 +448,7 @@ static int build_flags_proc_fi_guard(PyObject* module)
 {
     PyObject* attrs = PyDict_New();
     if (attrs == NULL) {
-        PyErr_Format(PyExc_MemoryError, "failed to allocate for flags fp");
+        PyErr_NoMemory();
         return -1;
     }
 
@@ -431,7 +469,7 @@ static int build_flags_soi(PyObject* module)
 {
     PyObject* attrs = PyDict_New();
     if (attrs == NULL) {
-        PyErr_Format(PyExc_MemoryError, "failed to allocate for enum soi");
+        PyErr_NoMemory();
         return -1;
     }
 
@@ -464,7 +502,7 @@ static int build_flags_open_mode(PyObject* module)
 {
     PyObject* attrs = PyDict_New();
     if (attrs == NULL) {
-        PyErr_Format(PyExc_MemoryError, "failed to allocate for enum open_mode");
+        PyErr_NoMemory();
         return -1;
     }
 
@@ -564,7 +602,7 @@ static int call_proc_pidfdinfo(pid_t pid, int fd, int flavor, BufferType& buffer
     size_t size = proc_pidfdinfo(pid, fd, flavor, &buffer, sizeof(buffer));
     if (size <= 0) {
         PyErr_Format(PyExc_OSError, 
-            "proc_pidfdinfo() flavor %d failed: errno %d size %d", 
+            "proc_pidfdinfo() flavor %d failed: errno %d sizeof(buffer) %d", 
             flavor, errno, sizeof(buffer));
         return -1;
     } else if (size < sizeof(buffer)) {
@@ -590,13 +628,13 @@ static PyObject* extract_address(ModuleState& state, const in4in6_addr& addr)
 
     uint32_t a = ntohl(addr.i46a_addr4.s_addr);
 
+    // FIXME: catch errors
     PyObject* b = PyLong_FromLong(a);
     PyObject* args = PyTuple_Pack(1, b);
     PyObject* py_addr = PyObject_Call(state.ipv4_ctor, args, NULL);
 
     Py_XDECREF(args);
     Py_XDECREF(b);
-    // FIXME: catch errors
     return py_addr;
 }
 
@@ -618,7 +656,7 @@ static PyObject* extract_address(ModuleState& state, const in6_addr& addr)
 }
 
 template<typename T>
-PyObject* extract_address(ModuleState& state, const T& addr, bool is_ipv4)
+static PyObject* extract_address(ModuleState& state, const T& addr, bool is_ipv4)
 {
     return is_ipv4 ? 
         extract_address(state, addr.ina_46) :
@@ -646,7 +684,7 @@ static int handle_tcp_socket(ModuleState& state, const socket_info& si, PyObject
     return 0;
 }
 
-int handle_in_socket(ModuleState& state, const socket_info& si, PyObject* out) 
+static int handle_in_socket(ModuleState& state, const socket_info& si, PyObject* out) 
 {
     const bool is_ipv4 = inet_is_ipv4(si);
 
@@ -684,6 +722,7 @@ static PyObject* handle_inet_socket(ModuleState& state, const socket_fdinfo& si)
 {
     PyObject* out = PyDict_New();
     if(out == NULL) {
+        PyErr_NoMemory();
         return NULL;
     }
 
@@ -711,11 +750,13 @@ static PyObject* handle_unix_socket(ModuleState& state, const socket_fdinfo& si)
 {
     PyObject* out = PyDict_New();
     if(out == NULL) {
+        PyErr_NoMemory();
         return NULL;
     }
 
     // extract the socket's path(s)... 
     // lsof does some pretty whack things here.. we'll just take the simple route
+    // for now.
     set_dict_val_steal_obj(out, "path", 
         PyUnicode_FromString(si.psi.soi_proto.pri_un.unsi_addr.ua_sun.sun_path));
 
@@ -737,9 +778,9 @@ static int handle_si_common(ModuleState& state, const proc_fileinfo& pfi, PyObje
 
 static int handle_dev(PyObject* out, const char* name, int32_t val) 
 {
-    // FIXME create dict here
     PyObject* dev = PyDict_New();
     if (dev == NULL) {
+        PyErr_NoMemory();
         return -1;
     }
     set_dict_val_unsigned(dev, "major", major(val));
@@ -754,6 +795,7 @@ static int handle_vnode_stat(ModuleState& state, const char* key, vinfo_stat vi_
     assert(socket != NULL);
     PyObject* stat = PyDict_New();
     if (stat == NULL) {
+        PyErr_NoMemory();
         return -1;
     }
 
@@ -796,6 +838,7 @@ static int handle_sockbuf_info(ModuleState& state, const char* key, const sockbu
     assert(socket != NULL);
     PyObject* buff_info = PyDict_New();
     if (buff_info== NULL) {
+        PyErr_NoMemory();
         return -1;
     }
 
@@ -881,6 +924,7 @@ static int handle_vnode_info(ModuleState& state, const char* key, const vnode_in
 {
     PyObject* vnode_info = PyDict_New();
     if (vnode_info == NULL) {
+        PyErr_NoMemory();
         return -1;
     }
 
@@ -904,6 +948,7 @@ static int handle_vnode(ModuleState& state, pid_t pid, int fd, PyObject* out)
 
     PyObject* vnode = PyDict_New();
     if (vnode == NULL) {
+        PyErr_NoMemory();
         return -1;
     }
 
@@ -956,6 +1001,7 @@ static int handle_pshm(ModuleState& state, pid_t pid, int fd, PyObject* out)
         return -1;
     }
 
+    // FIXME: handle errors
     handle_si_common(state, pshmi.pfi, out);
     handle_vnode_stat(state, "stat", pshmi.pshminfo.pshm_stat, out);
     set_dict_val_unsigned(out, "mapaddr", pshmi.pshminfo.pshm_mappaddr);
@@ -966,23 +1012,57 @@ static int handle_pshm(ModuleState& state, pid_t pid, int fd, PyObject* out)
 
 static int handle_psem(ModuleState& state, pid_t pid, int fd, PyObject* out) 
 {
-    struct psem_fdinfo psemi;
-    if (call_proc_pidfdinfo(pid, fd, PROC_PIDFDPSEMINFO, psemi) < 0) {
+    struct psem_fdinfo fdinfo;
+    if (call_proc_pidfdinfo(pid, fd, PROC_PIDFDPSEMINFO, fdinfo) < 0) {
         return -1;
     }
 
+    // FIXME: handle errors
+    handle_si_common(state, fdinfo.pfi, out);
+    handle_vnode_stat(state, "stat", fdinfo.pseminfo.psem_stat, out);
+    set_dict_val_steal_obj(out, "name", PyUnicode_FromString(fdinfo.pseminfo.psem_name));
     return 0;
 }
 
-//#define PROC_PIDFDATALKINFO             8
-//#define PROC_PIDFDCHANNELINFO           10
+static int handle_appletalk(ModuleState& state, pid_t pid, int fd, PyObject* out) 
+{
+    appletalk_fdinfo fdinfo;
+    if (call_proc_pidfdinfo(pid, fd, PROC_PIDFDATALKINFO, fdinfo) < 0) {
+        return -1;
+    }
+
+    // FIXME: handle errors
+    handle_si_common(state, fdinfo.pfi, out);
+    handle_vnode_stat(state, "stat", fdinfo.appletalkinfo.atalk_stat, out);
+    return 0;
+}
+
+static int handle_channel(ModuleState& state, pid_t pid, int fd, PyObject* out) 
+{
+    channel_fdinfo fdinfo;
+    if (call_proc_pidfdinfo(pid, fd, PROC_PIDFDCHANNELINFO, fdinfo) < 0) {
+        return -1;
+    }
+
+    // FIXME: handle errors
+    handle_si_common(state, fdinfo.pfi, out);
+
+    //FIXME: instance param 
+	//uuid_t                  chi_instance;
+    set_dict_val_unsigned(out, "chi_port", fdinfo.channelinfo.chi_port);
+    set_dict_val_unsigned(out, "chi_type", fdinfo.channelinfo.chi_type);
+    set_dict_val_unsigned(out, "chi_flags", fdinfo.channelinfo.chi_flags);
+    return 0;
+}
 
 static PyObject* get_fd_info(PyObject* self, PyObject *args)  
 {
     int fd = -1;
     pid_t pid;
-    if (!PyArg_ParseTuple(args, _Py_PARSE_PID _Py_PARSE_INTPTR, &pid, &fd))
+    if (!PyArg_ParseTuple(args, _Py_PARSE_PID _Py_PARSE_INTPTR, &pid, &fd)) {
+        PyErr_BadArgument();
         return NULL;
+    }
 
     // FIXME: heap alloc
     proc_fdinfo buffer[1024];
@@ -990,7 +1070,9 @@ static PyObject* get_fd_info(PyObject* self, PyObject *args)
     int n = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, &buffer, sizeof(buffer));
     if (n <= 0) {
         PyErr_Format(PyExc_RuntimeError, "proc_pidinfo failed, errno %d", errno);
+        return NULL;
     }
+
     int count = n / sizeof(struct proc_fdinfo);
 
     bool found = false;
@@ -1006,15 +1088,19 @@ static PyObject* get_fd_info(PyObject* self, PyObject *args)
     }
 
     if (!found) {
-        PyErr_Format(PyExc_RuntimeError, "couldn't find fd %d", fd);
+        PyErr_Format(PyExc_RuntimeError, "couldn't find fd %d for pid %d", fd, pid);
         return NULL;
     }
 
     ModuleState& state = get_module_state(self);
     PyObject* out = PyDict_New();
+    if (out == NULL) {
+        PyErr_NoMemory();
+        return NULL;
+    }
 
-    PyDict_SetItemString(out, "fd", PyLong_FromLong(fd));
-    PyDict_SetItemString(out, "fd_type", get_fd_type(state, fd_type));
+    set_dict_val_unsigned(out, "fd", fd);
+    set_dict_val_obj(out, "fd_type", get_fd_type(state, fd_type));
 
     int ret = 0;
     switch(fd_type) {
@@ -1033,13 +1119,19 @@ static PyObject* get_fd_info(PyObject* self, PyObject *args)
         case PROX_FDTYPE_PSHM:
             ret = handle_pshm(state, pid, fd, out);
             break;
-        case PROX_FDTYPE_FSEVENTS:
-        case PROX_FDTYPE_PSEM:
         case PROX_FDTYPE_ATALK:
-        case PROX_FDTYPE_NETPOLICY:
+            ret = handle_appletalk(state, pid, fd, out);
+            break;
+        case PROX_FDTYPE_PSEM:
+            ret = handle_psem(state, pid, fd, out);
+            break;
         case PROX_FDTYPE_CHANNEL:
+            ret = handle_channel(state, pid, fd, out);
+            break;
+        case PROX_FDTYPE_NETPOLICY:
+        case PROX_FDTYPE_FSEVENTS:
         case PROX_FDTYPE_NEXUS:
-            // unimplemented
+            // no specific fd info calls for these types
             break;
     };
 

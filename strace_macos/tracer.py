@@ -367,8 +367,8 @@ class Tracer:
         for syscall_def in self.registry.get_all_syscalls():
             bp = target.BreakpointCreateByName(syscall_def.name)
             #print(dir(bp))
-            if len(bp.locations) != 1:
-                print(bp)
+            #if len(bp.locations) != 1:
+            # .   print(bp)
            #print("BP name", bp.GetNames(), "loc", len(bp.locations))
            
         sys.exit(0)
