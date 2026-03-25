@@ -243,35 +243,12 @@ static PyObject* create_enum(PyObject* module, const char* enum_name, PyObject* 
 
 static PyObject* get_enum_value(PyObject* enum_type, int idx) {
     assert(enum_type);
-    PyObject *enum_instance = PyObject_CallFunction(enum_type, "(i)", idx);
-    return enum_instance;
+    return PyObject_CallFunction(enum_type, "(i)", idx);
 }
 
 static PyObject* get_flags_object(PyObject* flags_type, int flags) {
     assert(flags_type != NULL);
-
-    PyObject* value = PyLong_FromLong(flags);
-    PyObject* args = PyTuple_Pack(1, value);
-    if (value == NULL || args == NULL) {
-        PyErr_Format(PyExc_MemoryError, "failed to allocate for get_flags_object");
-        Py_XDECREF(value);
-        Py_XDECREF(args);
-        return NULL;
-    }
-
-    PyObject* ret = PyObject_Call(flags_type, args, NULL);
-    PyObject* ex = PyErr_GetRaisedException();
-
-    if (ex) {
-        assert(ret == NULL);
-        // re-raise exception ...
-        // SetRaisedException steals ex
-        PyErr_SetRaisedException(ex);
-    }
-
-    Py_XDECREF(value);
-    Py_XDECREF(args);
-    return ret;
+    return PyObject_CallFunction(flags_type, "(i)", flags);
 }
 
 static int build_enum_tcp_state(PyObject* module) 
@@ -378,7 +355,7 @@ static int build_enum_sockinfo(PyObject* module)
     return state.sockinfo_enum == NULL ? -1 : 0;
 };
 
-static int build_address_family(PyObject* module) 
+static int build_enum_address_family(PyObject* module) 
 {
     PyObject* attrs = PyDict_New();
     if (attrs == NULL) {
@@ -586,7 +563,7 @@ static int build_enums(PyObject* module)
 {
     if (build_enum_fd_type(module) < 0 || 
         build_enum_ifmt(module) < 0 || 
-        build_address_family(module) < 0 || 
+        build_enum_address_family(module) < 0 || 
         build_enum_tcp_state(module) < 0 || 
         build_enum_sockinfo(module) < 0 ||
         build_flags_open_mode(module) < 0 || 
@@ -599,6 +576,7 @@ static int build_enums(PyObject* module)
     return 0;
 }
 
+// call into proc_pidfdinfo(), with standardised error checking
 template<typename BufferType>
 static int call_proc_pidfdinfo(pid_t pid, int fd, int flavor, BufferType& buffer) 
 {
@@ -617,6 +595,7 @@ static int call_proc_pidfdinfo(pid_t pid, int fd, int flavor, BufferType& buffer
     return 0;
 }
 
+// ipv4 or ipv6?
 static bool inet_is_ipv4(const socket_info& si) 
 {
     const int family = si.soi_family;
@@ -1138,7 +1117,7 @@ static PyObject* get_fd_info(PyObject* self, PyObject *args)
     };
 
     if (ret < 0) {
-        Py_DECREF(out);
+        Py_CLEAR(out);
         return NULL;
     }
     return out;
@@ -1171,11 +1150,11 @@ static int miniproc_exec(PyObject *module)
     // looking them up at runtime, as they're called during queries
     state.ipv4_ctor = PyObject_GetAttrString(ipaddr_mod, "IPv4Address");
     state.ipv6_ctor = PyObject_GetAttrString(ipaddr_mod, "IPv6Address");
+    Py_CLEAR(ipaddr_mod);
+
     if (state.ipv4_ctor == NULL || state.ipv4_ctor == NULL) {
         return -1;
     }
-
-    Py_CLEAR(ipaddr_mod);
 
     return build_enums(module);
 }
