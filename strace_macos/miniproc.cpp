@@ -25,6 +25,7 @@ struct ModuleState {
     PyObject* ifmt_enum;
     PyObject* address_family_enum;
     PyObject* tcp_state_enum;
+    PyObject* sockinfo_enum;
 
     PyObject* soi_flags;
     PyObject* open_mode_flags;
@@ -49,6 +50,7 @@ struct ModuleState {
         Py_CLEAR(ifmt_enum);
         Py_CLEAR(address_family_enum);
         Py_CLEAR(tcp_state_enum);
+        Py_CLEAR(sockinfo_enum);
 
         Py_CLEAR(soi_flags);
         Py_CLEAR(open_mode_flags);
@@ -66,6 +68,7 @@ struct ModuleState {
         Py_VISIT(ifmt_enum);
         Py_VISIT(address_family_enum);
         Py_VISIT(tcp_state_enum);
+        Py_VISIT(sockinfo_enum);
 
         Py_VISIT(soi_flags);
         Py_VISIT(open_mode_flags);
@@ -350,6 +353,30 @@ static int build_enum_ifmt(PyObject* module)
     return state.ifmt_enum == NULL ? -1 : 0;
 };
 
+static int build_enum_sockinfo(PyObject* module) 
+{
+    PyObject* attrs = PyDict_New();
+    if (attrs == NULL) {
+        PyErr_NoMemory();
+        return -1;
+    }
+
+    add_enum_value(attrs, "GENERIC", SOCKINFO_GENERIC, "");
+    add_enum_value(attrs, "IN", SOCKINFO_IN, "");
+    add_enum_value(attrs, "TCP", SOCKINFO_TCP, "");
+    add_enum_value(attrs, "UN", SOCKINFO_UN, "");
+    add_enum_value(attrs, "NDRV", SOCKINFO_NDRV, "");
+    add_enum_value(attrs, "KERN_EVENT", SOCKINFO_KERN_EVENT, "");
+    add_enum_value(attrs, "KERN_CTL", SOCKINFO_KERN_CTL, "");
+    add_enum_value(attrs, "VSOCK", SOCKINFO_VSOCK, "");
+
+    struct ModuleState& state = get_module_state(module);
+
+    state.sockinfo_enum = create_enum(module, "SOCKINFO", attrs);
+
+    Py_DECREF(attrs);
+    return state.sockinfo_enum == NULL ? -1 : 0;
+};
 
 static int build_address_family(PyObject* module) 
 {
@@ -561,10 +588,11 @@ static int build_enums(PyObject* module)
         build_enum_ifmt(module) < 0 || 
         build_address_family(module) < 0 || 
         build_enum_tcp_state(module) < 0 || 
+        build_enum_sockinfo(module) < 0 ||
         build_flags_open_mode(module) < 0 || 
         build_flags_soi(module) < 0 ||
         build_flags_proc_fi_guard(module) < 0 ||
-        build_flags_proc_fp(module) < 0) {
+        build_flags_proc_fp(module) < 0 ) {
 
         return -1;
     }
@@ -681,16 +709,6 @@ static int handle_in_socket(ModuleState& state, const socket_info& si, PyObject*
 #define TSI_T_KEEP              2       /* keep alive */
 #define TSI_T_2MSL              3       /* 2*msl quiet time timer */
 #define TSI_T_NTIMERS           4
-enum {
-	SOCKINFO_GENERIC        = 0,
-	SOCKINFO_IN             = 1,
-	SOCKINFO_TCP            = 2,
-	SOCKINFO_UN             = 3,
-	SOCKINFO_NDRV           = 4,
-	SOCKINFO_KERN_EVENT     = 5,
-	SOCKINFO_KERN_CTL       = 6,
-	SOCKINFO_VSOCK          = 7,
-};
 #endif
 
 static PyObject* handle_inet_socket(ModuleState& state, const socket_fdinfo& si)
